@@ -75,6 +75,8 @@
   "browser.installed.message": "Сервис доступен в разделе «Мои сервисы».",
   "browser.installFailed.title": "Не удалось установить сервис",
   "browser.agentError.title": "Agent недоступен",
+  "browser.catalog.empty": "В каталоге нет запрошенного сервиса.",
+  "browser.catalogError.title": "Каталог недоступен",
   "settings.title": "Настройки",
   "settings.theme.title": "Тема",
   "settings.theme.system": "Использовать системную",

@@ -8,6 +8,9 @@ namespace MyApp.Desktop.Pages;
 public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
 {
     private readonly AgentServiceClient _agentClient = new();
+    private readonly ServiceCatalogClient _catalogClient = new();
+    private ServiceCatalogItem? _mockService;
+    private ServiceCatalogItem? _vpnService;
     private bool _isInstalled;
     private bool _isBusy;
 
@@ -23,29 +26,32 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
     public void ApplyLocalization()
     {
         var localization = LocalizationService.Current;
+        var mock = _mockService;
+        var vpn = _vpnService;
         TitleText.Text = localization.Translate("browser.title");
         SubtitleText.Text = localization.Translate("browser.subtitle");
-        VpnNameText.Text = localization.Translate("browser.vpn.name");
-        VpnDescriptionText.Text = localization.Translate("browser.vpn.description");
+        VpnNameText.Text = vpn?.Name ?? localization.Translate("browser.vpn.name");
+        VpnDescriptionText.Text = vpn?.Description ?? localization.Translate("browser.vpn.description");
         VpnActionButton.Content = localization.Translate("browser.vpn.action");
 
-        MockNameText.Text = localization.Translate("browser.mock.name");
-        MockPublisherText.Text = localization.Translate("browser.mock.publisher");
-        MockDescriptionText.Text = localization.Translate("browser.mock.description");
-        MockVersionText.Text = $"{localization.Translate("browser.version")}: 0.1.0";
-        MockCategoryText.Text = localization.Translate("browser.mock.category");
+        MockNameText.Text = mock?.Name ?? localization.Translate("browser.mock.name");
+        MockPublisherText.Text = mock?.Publisher.Name ?? localization.Translate("browser.mock.publisher");
+        MockDescriptionText.Text = mock?.Description ?? localization.Translate("browser.mock.description");
+        MockVersionText.Text = $"{localization.Translate("browser.version")}: {mock?.Version ?? "0.1.0"}";
+        MockCategoryText.Text = mock?.Category ?? localization.Translate("browser.mock.category");
         MockStateText.Text = localization.Translate(_isInstalled ? "browser.mock.installed" : "browser.mock.notInstalled");
         MockDetailsButtonText.Text = localization.Translate("browser.details");
         MockActionText.Text = localization.Translate(_isInstalled ? "browser.mock.open" : "browser.mock.install");
         MockActionIcon.Symbol = _isInstalled ? Symbol.OpenFile : Symbol.Download;
-        MockActionButton.IsEnabled = !_isBusy;
-        MockDetailsButton.IsEnabled = !_isBusy;
+        MockActionButton.IsEnabled = !_isBusy && (mock?.Package is not null || _isInstalled);
+        MockDetailsButton.IsEnabled = !_isBusy && mock is not null;
         MockActionProgress.IsActive = _isBusy;
         MockActionProgress.Visibility = _isBusy ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void ServiceBrowserPage_Loaded(object sender, RoutedEventArgs e)
     {
+        await LoadCatalogAsync();
         await RefreshAsync();
     }
 
@@ -81,7 +87,7 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = localization.Translate("browser.mock.name"),
+            Title = _mockService?.Name ?? localization.Translate("browser.mock.name"),
             CloseButtonText = localization.Translate("common.close"),
             DefaultButton = ContentDialogButton.Primary,
             Content = CreateDetailsContent()
@@ -102,10 +108,11 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
     private UIElement CreateDetailsContent()
     {
         var localization = LocalizationService.Current;
+        var mock = _mockService;
         var content = new StackPanel { Spacing = 16, MaxWidth = 520 };
         content.Children.Add(new TextBlock
         {
-            Text = localization.Translate("browser.mock.description"),
+            Text = mock?.Description ?? localization.Translate("browser.mock.description"),
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.82
         });
@@ -113,9 +120,9 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
         var metadata = new Grid { ColumnSpacing = 24, RowSpacing = 8 };
         metadata.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         metadata.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        AddMetadataRow(metadata, 0, localization.Translate("browser.version"), "0.1.0");
-        AddMetadataRow(metadata, 1, localization.Translate("browser.publisher"), "ExApp");
-        AddMetadataRow(metadata, 2, localization.Translate("browser.source"), localization.Translate("browser.source.local"));
+        AddMetadataRow(metadata, 0, localization.Translate("browser.version"), mock?.Version ?? "0.1.0");
+        AddMetadataRow(metadata, 1, localization.Translate("browser.publisher"), mock?.Publisher.Name ?? "ExApp");
+        AddMetadataRow(metadata, 2, localization.Translate("browser.source"), GetSourceLabel(mock));
         content.Children.Add(metadata);
 
         content.Children.Add(new TextBlock
@@ -153,9 +160,10 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
 
         try
         {
-            var packagePath = FindMockPackage()
-                ?? throw new InvalidOperationException(LocalizationService.Current.Translate("browser.mock.packageMissing"));
-            await _agentClient.InstallAsync(packagePath);
+            var mock = _mockService
+                ?? throw new InvalidOperationException(LocalizationService.Current.Translate("browser.catalog.empty"));
+            var package = await _catalogClient.ResolvePackageAsync(mock);
+            await _agentClient.InstallAsync(package.PackagePath, package.Sha256);
             _isInstalled = true;
             ServiceChangeNotifier.NotifyChanged();
             ShowOperation(InfoBarSeverity.Success, "browser.installed.title", "browser.installed.message");
@@ -192,6 +200,25 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
         ApplyLocalization();
     }
 
+    private async Task LoadCatalogAsync()
+    {
+        try
+        {
+            var catalog = await _catalogClient.LoadAsync();
+            _mockService = catalog.Services.FirstOrDefault(item => item.Id == "mock-service");
+            _vpnService = catalog.Services.FirstOrDefault(item => item.Id == "vpn-client");
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            OperationInfoBar.Severity = InfoBarSeverity.Error;
+            OperationInfoBar.Title = LocalizationService.Current.Translate("browser.catalogError.title");
+            OperationInfoBar.Message = exception.Message;
+            OperationInfoBar.IsOpen = true;
+        }
+
+        ApplyLocalization();
+    }
+
     private void ShowOperation(InfoBarSeverity severity, string titleKey, string messageKey)
     {
         var localization = LocalizationService.Current;
@@ -213,20 +240,15 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
         grid.Children.Add(valueText);
     }
 
-    private static string? FindMockPackage()
+    private static string GetSourceLabel(ServiceCatalogItem? item)
     {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null)
+        if (item?.Package?.Url is null)
         {
-            var candidate = Path.Combine(current.FullName, "artifacts", "mock-service-0.1.0-win-x64.svcpkg");
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            current = current.Parent;
+            return LocalizationService.Current.Translate("browser.source.local");
         }
 
-        return null;
+        return item.Package.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? item.Package.Url
+            : LocalizationService.Current.Translate("browser.source.local");
     }
 }

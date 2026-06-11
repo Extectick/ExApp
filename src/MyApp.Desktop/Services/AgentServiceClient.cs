@@ -28,11 +28,11 @@ internal sealed class AgentServiceClient
         await _client.SendAsync<object, AgentServiceInfo[]>(IpcCommands.ServiceList, new { })
         ?? [];
 
-    public async Task InstallAsync(string packagePath)
+    public async Task InstallAsync(string packagePath, string? expectedSha256 = null)
     {
         await _client.SendAsync<ServiceInstallRequest, object>(
             IpcCommands.ServiceInstall,
-            new ServiceInstallRequest(packagePath, null));
+            new ServiceInstallRequest(packagePath, expectedSha256));
     }
 
     public async Task UninstallAsync(bool deleteData)

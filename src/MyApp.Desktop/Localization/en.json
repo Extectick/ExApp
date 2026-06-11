@@ -75,6 +75,8 @@
   "browser.installed.message": "The service is available under My services.",
   "browser.installFailed.title": "Failed to install service",
   "browser.agentError.title": "Agent unavailable",
+  "browser.catalog.empty": "Service catalog did not contain the requested service.",
+  "browser.catalogError.title": "Catalog unavailable",
   "settings.title": "Settings",
   "settings.theme.title": "Theme",
   "settings.theme.system": "Use system setting",

@@ -93,15 +93,15 @@ Acceptance:
 
 Цель: Браузер сервисов загружает каталог извне.
 
-- [ ] TODO — создать `services.stable.json`
-- [ ] TODO — создать catalog schema
-- [ ] TODO — реализовать catalog downloader
-- [ ] TODO — реализовать cache
-- [ ] TODO — реализовать offline fallback
-- [ ] TODO — показать сервисы из каталога в UI
-- [ ] TODO — скачать mock package из GitHub Releases
-- [ ] TODO — проверить sha256 перед установкой
-- [ ] TODO — добавить basic signature placeholder
+- [x] DONE — создать `services.stable.json`
+- [x] DONE — создать catalog schema
+- [x] DONE — реализовать catalog downloader
+- [x] DONE — реализовать cache
+- [x] DONE — реализовать offline fallback
+- [x] DONE — показать сервисы из каталога в UI
+- [ ] REVIEW — скачать mock package из GitHub Releases
+- [x] DONE — проверить sha256 перед установкой
+- [x] DONE — добавить basic signature placeholder
 
 ## MVP 5 — VPN Service: Static Config
 

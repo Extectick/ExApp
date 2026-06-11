@@ -83,15 +83,15 @@
 
 ## Epic G — Service Catalog
 
-- [ ] TODO — G001 Define catalog schema
-- [ ] TODO — G002 Create services.stable.json
-- [ ] TODO — G003 Add catalog downloader
-- [ ] TODO — G004 Add catalog cache
-- [ ] TODO — G005 Add offline fallback
-- [ ] TODO — G006 Show catalog in Browser
-- [ ] TODO — G007 Install package from URL
-- [ ] TODO — G008 Validate catalog package hash
-- [ ] TODO — G009 Prepare catalog signing placeholder
+- [x] DONE — G001 Define catalog schema
+- [x] DONE — G002 Create services.stable.json
+- [x] DONE — G003 Add catalog downloader
+- [x] DONE — G004 Add catalog cache
+- [x] DONE — G005 Add offline fallback
+- [x] DONE — G006 Show catalog in Browser
+- [x] DONE — G007 Install package from URL
+- [x] DONE — G008 Validate catalog package hash
+- [x] DONE — G009 Prepare catalog signing placeholder
 
 ## Epic H — VPN Service
 

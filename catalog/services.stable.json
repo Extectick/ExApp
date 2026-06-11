@@ -1,0 +1,48 @@
+{
+  "$schema": "../schemas/service-catalog.schema.json",
+  "catalogVersion": 1,
+  "channel": "stable",
+  "updatedAt": "2026-06-12T00:00:00Z",
+  "signature": {
+    "algorithm": "dev-placeholder",
+    "keyId": "exapp-dev-2026",
+    "value": "unsigned-dev-catalog"
+  },
+  "services": [
+    {
+      "id": "mock-service",
+      "name": "Mock Service",
+      "description": "Local validation service for service lifecycle, status and log streaming.",
+      "version": "0.1.0",
+      "publisher": {
+        "id": "exapp",
+        "name": "ExApp"
+      },
+      "category": "Development tools",
+      "platform": "windows",
+      "architecture": "x64",
+      "status": "available",
+      "permissions": ["background"],
+      "package": {
+        "url": "../artifacts/mock-service-0.1.0-win-x64.svcpkg",
+        "sha256": "a35022ad7892d3cc2097ec61151006bea12bcaf54d659ffa23913906fb2c476c",
+        "size": 78927
+      }
+    },
+    {
+      "id": "vpn-client",
+      "name": "VPN Client",
+      "description": "First real service planned after the platform catalog and service runtime foundations.",
+      "version": "0.1.0",
+      "publisher": {
+        "id": "exapp",
+        "name": "ExApp"
+      },
+      "category": "Network",
+      "platform": "windows",
+      "architecture": "x64",
+      "status": "planned",
+      "permissions": ["network", "background", "tun", "dns", "routes"]
+    }
+  ]
+}

@@ -13,7 +13,7 @@
 - [x] DONE — реализован локальный mock service
 - [x] DONE — реализован Package Manager
 - [x] DONE — добавлен базовый Service Runtime
-- [ ] TODO — подключён GitHub service catalog
+- [ ] REVIEW — подключён GitHub service catalog
 - [ ] TODO — реализован первый VPN service
 - [ ] TODO — подключены обновления через Velopack
 
@@ -29,7 +29,7 @@
 
 ## Следующий лучший шаг
 
-Реализовать **MVP 4 — GitHub Service Catalog** из [`04_MVP_ROADMAP.md`](04_MVP_ROADMAP.md): catalog schema, `services.stable.json`, downloader, cache/offline fallback и установка пакетов из GitHub Releases.
+Завершить **MVP 4 — GitHub Service Catalog** из [`04_MVP_ROADMAP.md`](04_MVP_ROADMAP.md): подключить реальный GitHub Releases URL для mock package и добавить basic catalog signing placeholder.
 
 ## Правила обновления статуса
 
@@ -49,7 +49,7 @@
 | MVP 1 | REVIEW | локальный mock service |
 | MVP 2 | DONE | package manager и `.svcpkg` |
 | MVP 3 | DONE | Agent + IPC |
-| MVP 4 | TODO | GitHub service catalog |
+| MVP 4 | REVIEW | GitHub service catalog |
 | MVP 5 | TODO | VPN service без подписок |
 | MVP 6 | TODO | VPN subscription URL |
 | MVP 7 | TODO | обновления приложения и сервисов |

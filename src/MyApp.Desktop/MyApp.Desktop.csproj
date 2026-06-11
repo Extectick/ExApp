@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <Content Include="Localization\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\catalog\*.json" Link="catalog\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
