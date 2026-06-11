@@ -40,6 +40,43 @@ public sealed class ServiceProcessMonitor
             "Service executable is missing.",
             DateTimeOffset.UtcNow);
 
+    public async Task EnsureStoppedAsync(
+        ServiceDescriptor service,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        var pidPath = Path.Combine(service.RuntimeDirectory, "service.pid");
+        var pid = ReadPid(pidPath);
+        if (pid is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var process = Process.GetProcessById(pid.Value);
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync(cancellationToken).WaitAsync(timeout, cancellationToken);
+            }
+        }
+        catch (ArgumentException)
+        {
+            // The process already exited.
+        }
+        catch (TimeoutException)
+        {
+            throw new ServiceRuntimeException(
+                "service.stopTimeout",
+                $"Service process '{pid.Value}' did not stop before uninstall.");
+        }
+        finally
+        {
+            TryDeletePid(pidPath);
+        }
+    }
+
     private static int? ReadPid(string pidPath)
     {
         if (!File.Exists(pidPath) || !int.TryParse(File.ReadAllText(pidPath).Trim(), out var pid))
@@ -66,4 +103,15 @@ public sealed class ServiceProcessMonitor
     private static bool IsActive(string state) =>
         state.Equals("running", StringComparison.OrdinalIgnoreCase) ||
         state.Equals("starting", StringComparison.OrdinalIgnoreCase);
+
+    private static void TryDeletePid(string pidPath)
+    {
+        try
+        {
+            File.Delete(pidPath);
+        }
+        catch (IOException)
+        {
+        }
+    }
 }

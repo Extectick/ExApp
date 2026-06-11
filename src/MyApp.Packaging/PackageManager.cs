@@ -51,16 +51,26 @@ public sealed class PackageManager
             var versionDirectory = Path.Combine(serviceRoot, "versions", manifest.Version);
             var statePath = Path.Combine(serviceRoot, "package-state.json");
             var existingState = AtomicJsonStore.Read<PackageState>(statePath);
+            var repairingCurrentVersion = false;
 
             if (Directory.Exists(versionDirectory))
             {
-                if (existingState?.CurrentVersion == manifest.Version)
+                if (existingState?.CurrentVersion == manifest.Version &&
+                    IsInstalledVersionComplete(versionDirectory, manifest))
                 {
                     CachePackage(packagePath, packageHash);
                     return new PackageInstallResult(manifest, existingState, versionDirectory, AlreadyInstalled: true);
                 }
 
-                throw new PackageException("package.versionExists", $"Service '{manifest.Id}' version '{manifest.Version}' is already installed.");
+                if (existingState?.CurrentVersion == manifest.Version)
+                {
+                    TryDeleteDirectory(versionDirectory);
+                    repairingCurrentVersion = true;
+                }
+                else
+                {
+                    throw new PackageException("package.versionExists", $"Service '{manifest.Id}' version '{manifest.Version}' is already installed.");
+                }
             }
 
             Directory.CreateDirectory(Path.Combine(serviceRoot, "versions"));
@@ -73,7 +83,9 @@ public sealed class PackageManager
             {
                 ServiceId = manifest.Id,
                 CurrentVersion = manifest.Version,
-                PreviousVersion = existingState?.CurrentVersion,
+                PreviousVersion = repairingCurrentVersion
+                    ? existingState?.PreviousVersion
+                    : existingState?.CurrentVersion,
                 State = "installed",
                 UpdatedAt = now
             };
@@ -144,16 +156,20 @@ public sealed class PackageManager
                 return;
             }
 
-            TryDeleteDirectory(Path.Combine(serviceRoot, "versions"));
-            TryDeleteFile(Path.Combine(serviceRoot, "package-state.json"));
+            await DeleteDirectoryWithRetryAsync(
+                Path.Combine(serviceRoot, "versions"),
+                cancellationToken);
+            await DeleteFileWithRetryAsync(
+                Path.Combine(serviceRoot, "package-state.json"),
+                cancellationToken);
 
             if (deleteData)
             {
-                TryDeleteDirectory(serviceRoot);
+                await DeleteDirectoryWithRetryAsync(serviceRoot, cancellationToken);
             }
             else
             {
-                DeleteServiceMetadataExceptData(serviceRoot);
+                await DeleteServiceMetadataExceptDataAsync(serviceRoot, cancellationToken);
             }
 
             RemoveFromRegistry(serviceId);
@@ -275,7 +291,23 @@ public sealed class PackageManager
         }
     }
 
-    private static void DeleteServiceMetadataExceptData(string serviceRoot)
+    private static bool IsInstalledVersionComplete(string versionDirectory, ServiceManifest manifest)
+    {
+        var manifestPath = Path.Combine(versionDirectory, "service.manifest.json");
+        if (!File.Exists(manifestPath))
+        {
+            return false;
+        }
+
+        var executablePath = Path.GetFullPath(Path.Combine(
+            versionDirectory,
+            manifest.Entry.Executable.Replace('/', Path.DirectorySeparatorChar)));
+        return File.Exists(executablePath);
+    }
+
+    private static async Task DeleteServiceMetadataExceptDataAsync(
+        string serviceRoot,
+        CancellationToken cancellationToken)
     {
         foreach (var directory in Directory.EnumerateDirectories(serviceRoot))
         {
@@ -283,13 +315,64 @@ public sealed class PackageManager
             if (!name.Equals("data", StringComparison.OrdinalIgnoreCase) &&
                 !name.Equals("logs", StringComparison.OrdinalIgnoreCase))
             {
-                TryDeleteDirectory(directory);
+                await DeleteDirectoryWithRetryAsync(directory, cancellationToken);
             }
         }
 
         foreach (var file in Directory.EnumerateFiles(serviceRoot))
         {
-            TryDeleteFile(file);
+            await DeleteFileWithRetryAsync(file, cancellationToken);
+        }
+    }
+
+    private static async Task DeleteDirectoryWithRetryAsync(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        await RetryDeleteAsync(
+            path,
+            Directory.Exists,
+            () => Directory.Delete(path, recursive: true),
+            cancellationToken);
+    }
+
+    private static async Task DeleteFileWithRetryAsync(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        await RetryDeleteAsync(
+            path,
+            File.Exists,
+            () => File.Delete(path),
+            cancellationToken);
+    }
+
+    private static async Task RetryDeleteAsync(
+        string path,
+        Func<string, bool> exists,
+        Action delete,
+        CancellationToken cancellationToken)
+    {
+        const int attempts = 12;
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!exists(path))
+            {
+                return;
+            }
+
+            try
+            {
+                delete();
+                return;
+            }
+            catch (Exception exception) when (
+                attempt < attempts &&
+                exception is IOException or UnauthorizedAccessException)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(100 * attempt), cancellationToken);
+            }
         }
     }
 

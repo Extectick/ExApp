@@ -47,6 +47,23 @@ public sealed class PackageManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task InstallAsync_DamagedCurrentVersion_ReinstallsPackage()
+    {
+        var manager = CreateManager();
+        var package = _packages.Create();
+        var firstResult = await manager.InstallAsync(package);
+        File.Delete(Path.Combine(firstResult.InstallDirectory, "service.manifest.json"));
+
+        var repaired = await manager.InstallAsync(package);
+
+        Assert.False(repaired.AlreadyInstalled);
+        Assert.True(File.Exists(Path.Combine(repaired.InstallDirectory, "service.manifest.json")));
+        Assert.True(File.Exists(Path.Combine(repaired.InstallDirectory, "bin", "Test.Service.exe")));
+        Assert.Equal("1.0.0", manager.GetState("test-service")?.CurrentVersion);
+        Assert.Null(manager.GetState("test-service")?.PreviousVersion);
+    }
+
+    [Fact]
     public async Task InstallAsync_InvalidManifest_RejectsPackage()
     {
         var manager = CreateManager();
@@ -165,6 +182,34 @@ public sealed class PackageManagerTests : IDisposable
         await manager.UninstallAsync("test-service", deleteData: true);
 
         Assert.False(Directory.Exists(serviceRoot));
+        Assert.Empty(manager.GetInstalledServices());
+    }
+
+    [Fact]
+    public async Task UninstallAsync_TemporarilyLockedBinary_RetriesAndSucceeds()
+    {
+        var manager = CreateManager();
+        var installed = await manager.InstallAsync(_packages.Create());
+        var executable = Path.Combine(installed.InstallDirectory, "bin", "Test.Service.exe");
+
+        var lockStream = new FileStream(executable, FileMode.Open, FileAccess.Read, FileShare.None);
+        try
+        {
+            var uninstallTask = manager.UninstallAsync("test-service", deleteData: true);
+            await Task.Delay(350);
+            await lockStream.DisposeAsync();
+            lockStream = null!;
+            await uninstallTask;
+        }
+        finally
+        {
+            if (lockStream is not null)
+            {
+                await lockStream.DisposeAsync();
+            }
+        }
+
+        Assert.False(Directory.Exists(installed.InstallDirectory));
         Assert.Empty(manager.GetInstalledServices());
     }
 

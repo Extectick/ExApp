@@ -32,9 +32,16 @@ public sealed class ServiceRegistry(PackageManager packageManager, ServiceRuntim
         var state = packageManager.GetState(serviceId);
         if (state is not null)
         {
-            var manifest = ReadInstalledManifest(serviceId);
-            var executable = ResolveInstalledExecutable(serviceId, manifest);
-            return new ServiceDescriptor(serviceId, manifest, executable, Installed: true, runtimeDirectory);
+            try
+            {
+                var manifest = ReadInstalledManifest(serviceId);
+                var executable = ResolveInstalledExecutable(serviceId, manifest);
+                return new ServiceDescriptor(serviceId, manifest, executable, Installed: true, runtimeDirectory);
+            }
+            catch (Exception exception) when (exception is IOException or JsonException or PackageException or ServiceRuntimeException)
+            {
+                return CreateDamagedInstalledDescriptor(serviceId, state.CurrentVersion, runtimeDirectory);
+            }
         }
 
         if (!serviceId.Equals("mock-service", StringComparison.OrdinalIgnoreCase))
@@ -104,5 +111,25 @@ public sealed class ServiceRegistry(PackageManager packageManager, ServiceRuntim
         }
 
         return null;
+    }
+
+    private ServiceDescriptor CreateDamagedInstalledDescriptor(
+        string serviceId,
+        string version,
+        string runtimeDirectory)
+    {
+        var registryEntry = packageManager.GetInstalledServices()
+            .FirstOrDefault(item => item.Id.Equals(serviceId, StringComparison.OrdinalIgnoreCase));
+        return new ServiceDescriptor(
+            serviceId,
+            new ServiceManifest
+            {
+                Id = serviceId,
+                Name = registryEntry?.Name ?? serviceId,
+                Version = version
+            },
+            ExecutablePath: null,
+            Installed: false,
+            runtimeDirectory);
     }
 }

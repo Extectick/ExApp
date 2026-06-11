@@ -23,6 +23,9 @@ internal sealed class ServiceProcessClient(RuntimeService runtime)
     public Task<string> LogsAsync(string serviceId) => runtime.LogsAsync(serviceId);
 
     public Task ClearLogsAsync(string serviceId) => runtime.ClearLogsAsync(serviceId);
+
+    public Task PrepareForUninstallAsync(string serviceId, CancellationToken cancellationToken = default) =>
+        runtime.PrepareForUninstallAsync(serviceId, cancellationToken);
 }
 
 internal sealed class AgentCommandException(string code, string message) : Exception(message)

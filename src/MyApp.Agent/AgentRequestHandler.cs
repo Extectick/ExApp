@@ -60,15 +60,12 @@ internal sealed class AgentRequestHandler(
     private async Task<IpcResponse> UninstallAsync(IpcRequest request, CancellationToken cancellationToken)
     {
         var payload = RequirePayload<ServiceUninstallRequest>(request);
-        if (services.IsAvailable(payload.ServiceId))
+        try
         {
-            try
-            {
-                await services.StopAsync(payload.ServiceId);
-            }
-            catch (AgentCommandException)
-            {
-            }
+            await services.PrepareForUninstallAsync(payload.ServiceId, cancellationToken);
+        }
+        catch (ServiceRuntimeException exception) when (exception.Code is "service.notFound")
+        {
         }
 
         await packageManager.UninstallAsync(payload.ServiceId, payload.DeleteData, cancellationToken);
@@ -80,9 +77,9 @@ internal sealed class AgentRequestHandler(
         var payload = RequirePayload<ServiceCommandRequest>(request);
         try
         {
-            await services.StopAsync(payload.ServiceId);
+            await services.PrepareForUninstallAsync(payload.ServiceId, cancellationToken);
         }
-        catch (AgentCommandException)
+        catch (ServiceRuntimeException exception) when (exception.Code is "service.notFound")
         {
         }
 

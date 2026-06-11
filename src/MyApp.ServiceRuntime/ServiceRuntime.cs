@@ -63,6 +63,29 @@ public sealed class ServiceRuntime(
         return Task.CompletedTask;
     }
 
+    public async Task PrepareForUninstallAsync(
+        string serviceId,
+        CancellationToken cancellationToken = default)
+    {
+        var service = registry.Require(serviceId);
+        supervisor.MarkStopRequested(service);
+
+        if (service.ExecutablePath is not null)
+        {
+            try
+            {
+                EnsureSuccess(await commands.ExecuteAsync(service, "stop", cancellationToken));
+            }
+            catch (ServiceRuntimeException)
+            {
+                // PID-based termination below is the final authority for uninstall.
+            }
+        }
+
+        await monitor.EnsureStoppedAsync(service, TimeSpan.FromSeconds(8), cancellationToken);
+        await Task.Delay(150, cancellationToken);
+    }
+
     private async Task<AgentServiceStatus> ExecuteStatusAsync(
         ServiceDescriptor service,
         string command,
