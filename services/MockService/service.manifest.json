@@ -1,0 +1,29 @@
+{
+  "manifestVersion": 1,
+  "id": "mock-service",
+  "name": "Mock Service",
+  "description": "Local mock service for validating the ExApp service lifecycle.",
+  "version": "0.1.0",
+  "publisher": {
+    "id": "exapp",
+    "name": "ExApp"
+  },
+  "category": "development",
+  "platform": "windows",
+  "architecture": "x64",
+  "apiVersion": 1,
+  "minAppVersion": "0.1.0",
+  "minAgentVersion": "0.1.0",
+  "entry": {
+    "type": "process",
+    "executable": "bin/MyApp.Service.MockService.exe",
+    "arguments": []
+  },
+  "permissions": [
+    "background"
+  ],
+  "requiresAdmin": false,
+  "dataPolicy": {
+    "preserveOnUninstall": true
+  }
+}
