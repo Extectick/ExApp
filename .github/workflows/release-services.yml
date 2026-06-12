@@ -27,8 +27,13 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Build solution
-        run: dotnet build MyApp.sln --configuration Release
+      - name: Build and test service platform
+        shell: pwsh
+        run: |
+          dotnet build src/MyApp.Agent/MyApp.Agent.csproj --configuration Release
+          dotnet build services/MockService/MyApp.Service.MockService.csproj --configuration Release
+          dotnet test tests/MyApp.Packaging.Tests/MyApp.Packaging.Tests.csproj --configuration Release
+          dotnet test tests/MyApp.Ipc.Tests/MyApp.Ipc.Tests.csproj --configuration Release
 
       - name: Build mock service package
         shell: pwsh
@@ -68,6 +73,30 @@ jobs:
           $catalog.signature.keyId = "exapp-dev-2026"
           $catalog.signature.value = "unsigned-dev-catalog"
           $catalog | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 "artifacts/services.stable.json"
+
+      - name: Validate release assets
+        shell: pwsh
+        run: |
+          $catalog = Get-Content -Raw "artifacts/services.stable.json" | ConvertFrom-Json -Depth 20
+          $available = @($catalog.services | Where-Object { $_.status -eq "available" })
+          if ($available.Count -eq 0) {
+            throw "The release catalog has no available services."
+          }
+
+          foreach ($service in $available) {
+            if ([string]::IsNullOrWhiteSpace($service.package.url) -or
+                [string]::IsNullOrWhiteSpace($service.package.sha256) -or
+                $service.package.size -le 0) {
+              throw "Service '$($service.id)' has incomplete package metadata."
+            }
+          }
+
+          $package = "artifacts/mock-service-0.1.0-win-x64.svcpkg"
+          $expectedHash = (Get-Content "artifacts/mock-service-0.1.0-win-x64.sha256" -Raw).Trim()
+          $actualHash = (Get-FileHash -Algorithm SHA256 $package).Hash.ToLowerInvariant()
+          if ($actualHash -ne $expectedHash) {
+            throw "Generated package hash does not match its checksum asset."
+          }
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2

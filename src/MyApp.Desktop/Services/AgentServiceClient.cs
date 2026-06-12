@@ -4,7 +4,6 @@ namespace MyApp.Desktop.Services;
 
 internal sealed class AgentServiceClient
 {
-    private const string MockServiceId = "mock-service";
     private readonly NamedPipeIpcClient _client = new(AgentProcessManager.PipeName);
 
     public async Task<bool> PingAsync()
@@ -20,9 +19,14 @@ internal sealed class AgentServiceClient
         }
     }
 
-    public Task<AgentServiceStatus?> StartAsync() => SendStatusAsync(IpcCommands.ServiceStart);
-    public Task<AgentServiceStatus?> StopAsync() => SendStatusAsync(IpcCommands.ServiceStop);
-    public Task<AgentServiceStatus?> GetStatusAsync() => SendStatusAsync(IpcCommands.ServiceStatus);
+    public Task<AgentServiceStatus?> StartAsync(string serviceId) =>
+        SendStatusAsync(IpcCommands.ServiceStart, serviceId);
+
+    public Task<AgentServiceStatus?> StopAsync(string serviceId) =>
+        SendStatusAsync(IpcCommands.ServiceStop, serviceId);
+
+    public Task<AgentServiceStatus?> GetStatusAsync(string serviceId) =>
+        SendStatusAsync(IpcCommands.ServiceStatus, serviceId);
 
     public async Task<IReadOnlyList<AgentServiceInfo>> ListAsync() =>
         await _client.SendAsync<object, AgentServiceInfo[]>(IpcCommands.ServiceList, new { })
@@ -35,30 +39,30 @@ internal sealed class AgentServiceClient
             new ServiceInstallRequest(packagePath, expectedSha256));
     }
 
-    public async Task UninstallAsync(bool deleteData)
+    public async Task UninstallAsync(string serviceId, bool deleteData)
     {
         await _client.SendAsync<ServiceUninstallRequest, object>(
             IpcCommands.ServiceUninstall,
-            new ServiceUninstallRequest(MockServiceId, deleteData));
+            new ServiceUninstallRequest(serviceId, deleteData));
     }
 
-    public async Task<string> GetLogsAsync()
+    public async Task<string> GetLogsAsync(string serviceId)
     {
         var result = await _client.SendAsync<ServiceCommandRequest, ServiceLogsResult>(
             IpcCommands.ServiceLogs,
-            new ServiceCommandRequest(MockServiceId));
+            new ServiceCommandRequest(serviceId));
         return result?.Logs ?? string.Empty;
     }
 
-    public async Task ClearLogsAsync()
+    public async Task ClearLogsAsync(string serviceId)
     {
         await _client.SendAsync<ServiceCommandRequest, object>(
             IpcCommands.ServiceClearLogs,
-            new ServiceCommandRequest(MockServiceId));
+            new ServiceCommandRequest(serviceId));
     }
 
-    private Task<AgentServiceStatus?> SendStatusAsync(string command) =>
+    private Task<AgentServiceStatus?> SendStatusAsync(string command, string serviceId) =>
         _client.SendAsync<ServiceCommandRequest, AgentServiceStatus>(
             command,
-            new ServiceCommandRequest(MockServiceId));
+            new ServiceCommandRequest(serviceId));
 }

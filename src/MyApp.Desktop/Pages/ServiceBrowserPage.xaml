@@ -9,14 +9,8 @@
             <VisualStateGroup>
                 <VisualState x:Name="WideLayout">
                     <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="860" />
+                        <AdaptiveTrigger MinWindowWidth="720" />
                     </VisualState.StateTriggers>
-                    <VisualState.Setters>
-                        <Setter Target="CatalogSecondColumn.Width" Value="*" />
-                        <Setter Target="VpnCard.(Grid.Row)" Value="0" />
-                        <Setter Target="VpnCard.(Grid.Column)" Value="1" />
-                        <Setter Target="VpnCard.Margin" Value="0" />
-                    </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="NarrowLayout">
                     <VisualState.StateTriggers>
@@ -25,10 +19,6 @@
                     <VisualState.Setters>
                         <Setter Target="RootGrid.Padding" Value="16" />
                         <Setter Target="RootGrid.RowSpacing" Value="14" />
-                        <Setter Target="CatalogSecondColumn.Width" Value="0" />
-                        <Setter Target="VpnCard.(Grid.Row)" Value="1" />
-                        <Setter Target="VpnCard.(Grid.Column)" Value="0" />
-                        <Setter Target="VpnCard.Margin" Value="0,14,0,0" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -41,7 +31,7 @@
         </Grid.RowDefinitions>
 
         <StackPanel Spacing="4">
-            <TextBlock x:Name="TitleText" Style="{ThemeResource TitleTextBlockStyle}" Text="Service Browser" />
+            <TextBlock x:Name="TitleText" Style="{ThemeResource TitleTextBlockStyle}" />
             <TextBlock x:Name="SubtitleText" Opacity="0.72" TextWrapping="Wrap" />
         </StackPanel>
 
@@ -51,96 +41,127 @@
             IsClosable="True"
             IsOpen="False" />
 
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <Grid x:Name="CatalogGrid" MaxWidth="760" ColumnSpacing="16" HorizontalAlignment="Left" VerticalAlignment="Top">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition x:Name="CatalogSecondColumn" Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <Border
-                    x:Name="MockCard"
-                    MaxWidth="372"
-                    Padding="18"
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Top"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8">
-                    <Grid RowSpacing="14">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="3">
-                                <TextBlock x:Name="MockNameText" FontSize="18" FontWeight="SemiBold" Text="Mock Service" />
-                                <TextBlock x:Name="MockPublisherText" Opacity="0.68" />
-                            </StackPanel>
-                            <Border Grid.Column="1" Padding="9,4" Background="{ThemeResource SystemFillColorNeutralBackgroundBrush}" CornerRadius="8">
-                                <TextBlock x:Name="MockStateText" FontWeight="SemiBold" />
-                            </Border>
-                        </Grid>
+        <GridView
+            x:Name="ServicesGrid"
+            Grid.Row="2"
+            ItemsSource="{x:Bind Services}"
+            IsItemClickEnabled="False"
+            IsMultiSelectCheckBoxEnabled="False"
+            SelectionMode="None"
+            SizeChanged="ServicesGrid_SizeChanged"
+            VerticalAlignment="Stretch"
+            VerticalContentAlignment="Top"
+            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+            ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <GridView.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <ItemsWrapGrid
+                        ItemWidth="364"
+                        MaximumRowsOrColumns="8"
+                        Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </GridView.ItemsPanel>
+            <GridView.ItemContainerStyle>
+                <Style TargetType="GridViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                    <Setter Property="Margin" Value="0,0,14,14" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="MinHeight" Value="236" />
+                </Style>
+            </GridView.ItemContainerStyle>
+            <GridView.ItemTemplate>
+                <DataTemplate>
+                    <Border
+                        MinHeight="236"
+                        Padding="18"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                        <Grid RowSpacing="14">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
-                        <StackPanel Grid.Row="1" Spacing="12">
-                            <TextBlock x:Name="MockDescriptionText" TextWrapping="Wrap" Opacity="0.82" />
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock x:Name="MockVersionText" Opacity="0.72" />
-                                <TextBlock x:Name="MockCategoryText" Opacity="0.72" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <Grid Grid.Row="2" ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Button x:Name="MockDetailsButton" Click="MockDetailsButton_Click">
-                                <TextBlock x:Name="MockDetailsButtonText" />
-                            </Button>
-                            <Button x:Name="MockActionButton" Grid.Column="1" Click="MockActionButton_Click" MinWidth="132">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <ProgressRing x:Name="MockActionProgress" Width="16" Height="16" IsActive="False" Visibility="Collapsed" />
-                                    <SymbolIcon x:Name="MockActionIcon" Symbol="Download" />
-                                    <TextBlock x:Name="MockActionText" Text="Install" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3">
+                                    <TextBlock
+                                        FontSize="18"
+                                        FontWeight="SemiBold"
+                                        Text="{Binding Item.Name}"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        Opacity="0.68"
+                                        Text="{Binding Item.Publisher.Name}"
+                                        TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                            </Button>
-                        </Grid>
-                    </Grid>
-                </Border>
+                                <Border
+                                    Grid.Column="1"
+                                    Padding="9,4"
+                                    Background="{ThemeResource SystemFillColorNeutralBackgroundBrush}"
+                                    CornerRadius="8">
+                                    <TextBlock FontWeight="SemiBold" Text="{Binding StateText}" />
+                                </Border>
+                            </Grid>
 
-                <Border
-                    x:Name="VpnCard"
-                    Grid.Column="1"
-                    MaxWidth="372"
-                    Padding="18"
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Top"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8">
-                    <Grid RowSpacing="14">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <TextBlock x:Name="VpnNameText" FontSize="18" FontWeight="SemiBold" Text="VPN Client" />
-                        <TextBlock x:Name="VpnDescriptionText" Grid.Row="1" TextWrapping="Wrap" Opacity="0.82" />
-                        <Button x:Name="VpnActionButton" Grid.Row="2" IsEnabled="False" HorizontalAlignment="Right" />
-                    </Grid>
-                </Border>
-            </Grid>
-        </ScrollViewer>
+                            <StackPanel Grid.Row="1" Spacing="12">
+                                <TextBlock
+                                    MaxHeight="60"
+                                    Opacity="0.82"
+                                    Text="{Binding Item.Description}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <TextBlock Opacity="0.72" Text="{Binding VersionText}" />
+                                    <TextBlock
+                                        MaxWidth="170"
+                                        Opacity="0.72"
+                                        Text="{Binding Item.Category}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Grid Grid.Row="2" ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button
+                                    Click="DetailsButton_Click"
+                                    IsEnabled="{Binding IsDetailsEnabled}"
+                                    Tag="{Binding Item.Id}">
+                                    <TextBlock Text="{Binding DetailsText}" />
+                                </Button>
+                                <Button
+                                    Grid.Column="1"
+                                    MinWidth="132"
+                                    Click="ActionButton_Click"
+                                    IsEnabled="{Binding IsActionEnabled}"
+                                    Tag="{Binding Item.Id}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <ProgressRing
+                                            Width="16"
+                                            Height="16"
+                                            IsActive="{Binding IsBusy}"
+                                            Visibility="{Binding ProgressVisibility}" />
+                                        <SymbolIcon
+                                            Symbol="{Binding ActionIcon}"
+                                            Visibility="{Binding IconVisibility}" />
+                                        <TextBlock Text="{Binding ActionText}" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </GridView.ItemTemplate>
+        </GridView>
     </Grid>
 </Page>

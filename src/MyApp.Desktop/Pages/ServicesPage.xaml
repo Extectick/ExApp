@@ -68,52 +68,79 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <ScrollViewer
-                x:Name="ServicesScrollViewer"
-                HorizontalScrollBarVisibility="Disabled"
-                SizeChanged="ServicesScrollViewer_SizeChanged"
-                VerticalScrollBarVisibility="Auto">
-                <Border
-                    x:Name="ServiceCardRoot"
-                    Width="442"
-                    MaxWidth="442"
-                    MinHeight="200"
-                    Padding="20"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Top"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    PointerEntered="ServiceCardRoot_PointerEntered"
-                    PointerExited="ServiceCardRoot_PointerExited"
-                    Tapped="ServiceCardRoot_Tapped">
-                    <Grid RowSpacing="18">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <StackPanel Spacing="10">
-                            <Grid ColumnSpacing="10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="MockServiceNameText" FontSize="20" FontWeight="SemiBold" Text="Mock Service" />
+            <GridView
+                x:Name="InstalledServicesGrid"
+                ItemsSource="{x:Bind Services}"
+                IsItemClickEnabled="True"
+                ItemClick="InstalledServicesGrid_ItemClick"
+                SelectionMode="None"
+                SizeChanged="InstalledServicesGrid_SizeChanged"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <GridView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsWrapGrid ItemWidth="456" Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </GridView.ItemsPanel>
+                <GridView.ItemContainerStyle>
+                    <Style TargetType="GridViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                        <Setter Property="Margin" Value="0,0,14,14" />
+                        <Setter Property="Padding" Value="0" />
+                    </Style>
+                </GridView.ItemContainerStyle>
+                <GridView.ItemTemplate>
+                    <DataTemplate>
+                        <Border
+                            MinHeight="200"
+                            Padding="20"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                            <Grid RowSpacing="18">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <StackPanel Spacing="10">
+                                    <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding Name}" />
+                                    <TextBlock
+                                        MaxHeight="48"
+                                        Opacity="0.72"
+                                        Text="{Binding Message}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap" />
+                                    <TextBlock Opacity="0.65" Text="{Binding StateText}" />
+                                </StackPanel>
+                                <Button
+                                    Grid.Row="1"
+                                    MinWidth="136"
+                                    Padding="10,5"
+                                    HorizontalAlignment="Right"
+                                    Click="ListToggleButton_Click"
+                                    IsEnabled="{Binding IsActionEnabled}"
+                                    Tag="{Binding ServiceId}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Grid Width="22" Height="18">
+                                            <ProgressRing
+                                                Width="16"
+                                                Height="16"
+                                                IsActive="{Binding IsBusy}"
+                                                Visibility="{Binding ProgressVisibility}" />
+                                            <SymbolIcon
+                                                Symbol="{Binding ActionIcon}"
+                                                Visibility="{Binding IconVisibility}" />
+                                        </Grid>
+                                        <TextBlock Text="{Binding ActionText}" />
+                                    </StackPanel>
+                                </Button>
                             </Grid>
-                            <TextBlock x:Name="MockServiceDescriptionText" MaxWidth="720" Opacity="0.72" TextWrapping="Wrap" />
-                        </StackPanel>
-                        <Button x:Name="ListToggleButton" Grid.Row="1" Click="ToggleServiceButton_Click" PointerPressed="ToggleButton_PointerPressed" HorizontalAlignment="Right" MinWidth="136" Padding="10,5">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Grid Width="22" Height="18">
-                                    <ProgressRing x:Name="ListStartingRing" Width="16" Height="16" IsActive="False" Visibility="Collapsed" />
-                                    <SymbolIcon x:Name="ListToggleIcon" Symbol="Play" />
-                                </Grid>
-                                <TextBlock x:Name="ListToggleButtonText" Text="Start" />
-                            </StackPanel>
-                        </Button>
-                    </Grid>
-                </Border>
-            </ScrollViewer>
+                        </Border>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
 
             <StackPanel x:Name="EmptyServicesPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
                 <FontIcon Glyph="&#xE71B;" FontSize="32" Opacity="0.65" />

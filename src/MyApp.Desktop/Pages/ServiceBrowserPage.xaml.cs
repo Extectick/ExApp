@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using MyApp.Desktop.Services;
@@ -9,10 +10,11 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
 {
     private readonly AgentServiceClient _agentClient = new();
     private readonly ServiceCatalogClient _catalogClient = new();
-    private ServiceCatalogItem? _mockService;
-    private ServiceCatalogItem? _vpnService;
-    private bool _isInstalled;
-    private bool _isBusy;
+    private readonly List<ServiceCatalogItem> _catalogItems = [];
+    private readonly HashSet<string> _installedServiceIds = new(StringComparer.OrdinalIgnoreCase);
+    private string? _busyServiceId;
+
+    internal ObservableCollection<ServiceCatalogCard> Services { get; } = [];
 
     public ServiceBrowserPage()
     {
@@ -26,27 +28,9 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
     public void ApplyLocalization()
     {
         var localization = LocalizationService.Current;
-        var mock = _mockService;
-        var vpn = _vpnService;
         TitleText.Text = localization.Translate("browser.title");
         SubtitleText.Text = localization.Translate("browser.subtitle");
-        VpnNameText.Text = vpn?.Name ?? localization.Translate("browser.vpn.name");
-        VpnDescriptionText.Text = vpn?.Description ?? localization.Translate("browser.vpn.description");
-        VpnActionButton.Content = localization.Translate("browser.vpn.action");
-
-        MockNameText.Text = mock?.Name ?? localization.Translate("browser.mock.name");
-        MockPublisherText.Text = mock?.Publisher.Name ?? localization.Translate("browser.mock.publisher");
-        MockDescriptionText.Text = mock?.Description ?? localization.Translate("browser.mock.description");
-        MockVersionText.Text = $"{localization.Translate("browser.version")}: {mock?.Version ?? "0.1.0"}";
-        MockCategoryText.Text = mock?.Category ?? localization.Translate("browser.mock.category");
-        MockStateText.Text = localization.Translate(_isInstalled ? "browser.mock.installed" : "browser.mock.notInstalled");
-        MockDetailsButtonText.Text = localization.Translate("browser.details");
-        MockActionText.Text = localization.Translate(_isInstalled ? "browser.mock.open" : "browser.mock.install");
-        MockActionIcon.Symbol = _isInstalled ? Symbol.OpenFile : Symbol.Download;
-        MockActionButton.IsEnabled = !_isBusy && (mock?.Package is not null || _isInstalled);
-        MockDetailsButton.IsEnabled = !_isBusy && mock is not null;
-        MockActionProgress.IsActive = _isBusy;
-        MockActionProgress.Visibility = _isBusy ? Visibility.Visible : Visibility.Collapsed;
+        RebuildCards();
     }
 
     private async void ServiceBrowserPage_Loaded(object sender, RoutedEventArgs e)
@@ -65,54 +49,72 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
         await RefreshAsync();
     }
 
-    private async void MockDetailsButton_Click(object sender, RoutedEventArgs e)
+    private void ServicesGrid_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        await ShowDetailsDialogAsync(allowInstall: !_isInstalled);
+        if (ServicesGrid.ItemsPanelRoot is not ItemsWrapGrid panel || e.NewSize.Width <= 0)
+        {
+            return;
+        }
+
+        panel.ItemWidth = Math.Min(364, Math.Max(220, e.NewSize.Width));
     }
 
-    private async void MockActionButton_Click(object sender, RoutedEventArgs e)
+    private async void DetailsButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_isInstalled)
+        if (sender is Button { Tag: string serviceId } && FindService(serviceId) is { } item)
+        {
+            await ShowDetailsDialogAsync(item);
+        }
+    }
+
+    private async void ActionButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string serviceId } || FindService(serviceId) is not { } item)
+        {
+            return;
+        }
+
+        if (_installedServiceIds.Contains(item.Id))
         {
             (Application.Current as App)?.MainWindow?.NavigateToServices();
             return;
         }
 
-        await ShowDetailsDialogAsync(allowInstall: true);
+        await InstallAsync(item);
     }
 
-    private async Task ShowDetailsDialogAsync(bool allowInstall)
+    private async Task ShowDetailsDialogAsync(ServiceCatalogItem item)
     {
         var localization = LocalizationService.Current;
+        var isInstallable = IsInstallable(item) && !_installedServiceIds.Contains(item.Id);
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = _mockService?.Name ?? localization.Translate("browser.mock.name"),
+            Title = item.Name,
             CloseButtonText = localization.Translate("common.close"),
             DefaultButton = ContentDialogButton.Primary,
-            Content = CreateDetailsContent()
+            Content = CreateDetailsContent(item)
         };
 
-        if (allowInstall)
+        if (isInstallable)
         {
-            dialog.PrimaryButtonText = localization.Translate("browser.mock.install");
+            dialog.PrimaryButtonText = localization.Translate("browser.install");
         }
 
         var result = await dialog.ShowAsync();
-        if (allowInstall && result == ContentDialogResult.Primary)
+        if (isInstallable && result == ContentDialogResult.Primary)
         {
-            await InstallAsync();
+            await InstallAsync(item);
         }
     }
 
-    private UIElement CreateDetailsContent()
+    private UIElement CreateDetailsContent(ServiceCatalogItem item)
     {
         var localization = LocalizationService.Current;
-        var mock = _mockService;
         var content = new StackPanel { Spacing = 16, MaxWidth = 520 };
         content.Children.Add(new TextBlock
         {
-            Text = mock?.Description ?? localization.Translate("browser.mock.description"),
+            Text = item.Description,
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.82
         });
@@ -120,9 +122,9 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
         var metadata = new Grid { ColumnSpacing = 24, RowSpacing = 8 };
         metadata.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         metadata.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        AddMetadataRow(metadata, 0, localization.Translate("browser.version"), mock?.Version ?? "0.1.0");
-        AddMetadataRow(metadata, 1, localization.Translate("browser.publisher"), mock?.Publisher.Name ?? "ExApp");
-        AddMetadataRow(metadata, 2, localization.Translate("browser.source"), GetSourceLabel(mock));
+        AddMetadataRow(metadata, 0, localization.Translate("browser.version"), item.Version);
+        AddMetadataRow(metadata, 1, localization.Translate("browser.publisher"), item.Publisher.Name);
+        AddMetadataRow(metadata, 2, localization.Translate("browser.source"), GetSourceLabel(item));
         content.Children.Add(metadata);
 
         content.Children.Add(new TextBlock
@@ -130,55 +132,92 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
             Text = localization.Translate("browser.permissions"),
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
         });
-        var permission = new Grid { ColumnSpacing = 10 };
-        permission.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        permission.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        permission.Children.Add(new SymbolIcon(Symbol.Sync) { VerticalAlignment = VerticalAlignment.Center });
-        var permissionText = new StackPanel { Spacing = 2 };
-        Grid.SetColumn(permissionText, 1);
-        permissionText.Children.Add(new TextBlock
+
+        if (item.Permissions.Count == 0)
         {
-            Text = localization.Translate("browser.permission.background"),
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-        });
-        permissionText.Children.Add(new TextBlock
+            content.Children.Add(new TextBlock
+            {
+                Text = localization.Translate("browser.permissions.none"),
+                Opacity = 0.72
+            });
+        }
+        else
         {
-            Text = localization.Translate("browser.permission.background.description"),
-            TextWrapping = TextWrapping.Wrap,
-            Opacity = 0.72
-        });
-        permission.Children.Add(permissionText);
-        content.Children.Add(permission);
+            foreach (var permission in item.Permissions)
+            {
+                content.Children.Add(CreatePermissionRow(permission));
+            }
+        }
+
         return content;
     }
 
-    private async Task InstallAsync()
+    private static UIElement CreatePermissionRow(string permission)
     {
-        _isBusy = true;
-        ApplyLocalization();
-        ShowOperation(InfoBarSeverity.Informational, "browser.installing.title", "browser.installing.message");
+        var localization = LocalizationService.Current;
+        var titleKey = $"browser.permission.{permission}";
+        var descriptionKey = $"{titleKey}.description";
+        var translatedTitle = localization.Translate(titleKey);
+        var translatedDescription = localization.Translate(descriptionKey);
+
+        var row = new Grid { ColumnSpacing = 10 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.Children.Add(new SymbolIcon(Symbol.Permissions) { VerticalAlignment = VerticalAlignment.Center });
+
+        var text = new StackPanel { Spacing = 2 };
+        Grid.SetColumn(text, 1);
+        text.Children.Add(new TextBlock
+        {
+            Text = translatedTitle == titleKey ? permission : translatedTitle,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+        });
+        if (translatedDescription != descriptionKey)
+        {
+            text.Children.Add(new TextBlock
+            {
+                Text = translatedDescription,
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.72
+            });
+        }
+
+        row.Children.Add(text);
+        return row;
+    }
+
+    private async Task InstallAsync(ServiceCatalogItem item)
+    {
+        _busyServiceId = item.Id;
+        RebuildCards();
+        ShowOperation(
+            InfoBarSeverity.Informational,
+            LocalizationService.Current.Translate("browser.installing.title"),
+            string.Format(LocalizationService.Current.Translate("browser.installing.message"), item.Name));
 
         try
         {
-            var mock = _mockService
-                ?? throw new InvalidOperationException(LocalizationService.Current.Translate("browser.catalog.empty"));
-            var package = await _catalogClient.ResolvePackageAsync(mock);
+            var package = await _catalogClient.ResolvePackageAsync(item);
             await _agentClient.InstallAsync(package.PackagePath, package.Sha256);
-            _isInstalled = true;
+            _installedServiceIds.Add(item.Id);
             ServiceChangeNotifier.NotifyChanged();
-            ShowOperation(InfoBarSeverity.Success, "browser.installed.title", "browser.installed.message");
+            ShowOperation(
+                InfoBarSeverity.Success,
+                LocalizationService.Current.Translate("browser.installed.title"),
+                string.Format(LocalizationService.Current.Translate("browser.installed.message"), item.Name));
         }
-        catch (Exception exception) when (exception is IpcException or InvalidOperationException)
+        catch (Exception exception) when (
+            exception is IpcException or InvalidOperationException or IOException or HttpRequestException)
         {
-            OperationInfoBar.Severity = InfoBarSeverity.Error;
-            OperationInfoBar.Title = LocalizationService.Current.Translate("browser.installFailed.title");
-            OperationInfoBar.Message = exception.Message;
-            OperationInfoBar.IsOpen = true;
+            ShowOperation(
+                InfoBarSeverity.Error,
+                LocalizationService.Current.Translate("browser.installFailed.title"),
+                exception.Message);
         }
         finally
         {
-            _isBusy = false;
-            ApplyLocalization();
+            _busyServiceId = null;
+            RebuildCards();
         }
     }
 
@@ -187,17 +226,21 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
         try
         {
             var services = await _agentClient.ListAsync();
-            _isInstalled = services.Any(item => item.ServiceId == "mock-service" && item.Installed);
+            _installedServiceIds.Clear();
+            foreach (var service in services.Where(service => service.Installed))
+            {
+                _installedServiceIds.Add(service.ServiceId);
+            }
         }
         catch (IpcException exception)
         {
-            OperationInfoBar.Severity = InfoBarSeverity.Error;
-            OperationInfoBar.Title = LocalizationService.Current.Translate("browser.agentError.title");
-            OperationInfoBar.Message = exception.Message;
-            OperationInfoBar.IsOpen = true;
+            ShowOperation(
+                InfoBarSeverity.Error,
+                LocalizationService.Current.Translate("browser.agentError.title"),
+                exception.Message);
         }
 
-        ApplyLocalization();
+        RebuildCards();
     }
 
     private async Task LoadCatalogAsync()
@@ -205,26 +248,66 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
         try
         {
             var catalog = await _catalogClient.LoadAsync();
-            _mockService = catalog.Services.FirstOrDefault(item => item.Id == "mock-service");
-            _vpnService = catalog.Services.FirstOrDefault(item => item.Id == "vpn-client");
+            _catalogItems.Clear();
+            _catalogItems.AddRange(catalog.Services.OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase));
         }
-        catch (Exception exception) when (exception is IOException or InvalidOperationException or System.Text.Json.JsonException)
+        catch (Exception exception) when (
+            exception is IOException or InvalidOperationException or System.Text.Json.JsonException or HttpRequestException)
         {
-            OperationInfoBar.Severity = InfoBarSeverity.Error;
-            OperationInfoBar.Title = LocalizationService.Current.Translate("browser.catalogError.title");
-            OperationInfoBar.Message = exception.Message;
-            OperationInfoBar.IsOpen = true;
+            ShowOperation(
+                InfoBarSeverity.Error,
+                LocalizationService.Current.Translate("browser.catalogError.title"),
+                exception.Message);
         }
 
-        ApplyLocalization();
+        RebuildCards();
     }
 
-    private void ShowOperation(InfoBarSeverity severity, string titleKey, string messageKey)
+    private void RebuildCards()
     {
+        if (ServicesGrid is null)
+        {
+            return;
+        }
+
         var localization = LocalizationService.Current;
+        Services.Clear();
+        foreach (var item in _catalogItems)
+        {
+            var isInstalled = _installedServiceIds.Contains(item.Id);
+            var isBusy = string.Equals(_busyServiceId, item.Id, StringComparison.OrdinalIgnoreCase);
+            var isInstallable = IsInstallable(item);
+            Services.Add(new ServiceCatalogCard
+            {
+                Item = item,
+                StateText = localization.Translate(isInstalled
+                    ? "browser.installed"
+                    : isInstallable ? "browser.notInstalled" : "browser.unavailable"),
+                VersionText = $"{localization.Translate("browser.version")}: {item.Version}",
+                DetailsText = localization.Translate("browser.details"),
+                ActionText = localization.Translate(isInstalled
+                    ? "browser.open"
+                    : isBusy ? "browser.installing" : isInstallable ? "browser.install" : "browser.unavailable"),
+                ActionIcon = isInstalled ? Symbol.OpenFile : Symbol.Download,
+                IsBusy = isBusy,
+                IsDetailsEnabled = _busyServiceId is null,
+                IsActionEnabled = _busyServiceId is null && (isInstalled || isInstallable)
+            });
+        }
+    }
+
+    private ServiceCatalogItem? FindService(string serviceId) =>
+        _catalogItems.FirstOrDefault(item => item.Id.Equals(serviceId, StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsInstallable(ServiceCatalogItem item) =>
+        item.Package is not null &&
+        item.Status.Equals("available", StringComparison.OrdinalIgnoreCase);
+
+    private void ShowOperation(InfoBarSeverity severity, string title, string message)
+    {
         OperationInfoBar.Severity = severity;
-        OperationInfoBar.Title = localization.Translate(titleKey);
-        OperationInfoBar.Message = localization.Translate(messageKey);
+        OperationInfoBar.Title = title;
+        OperationInfoBar.Message = message;
         OperationInfoBar.IsOpen = true;
     }
 
@@ -240,15 +323,23 @@ public sealed partial class ServiceBrowserPage : Page, ILocalizedPage
         grid.Children.Add(valueText);
     }
 
-    private static string GetSourceLabel(ServiceCatalogItem? item)
-    {
-        if (item?.Package?.Url is null)
-        {
-            return LocalizationService.Current.Translate("browser.source.local");
-        }
-
-        return item.Package.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-            ? item.Package.Url
+    private static string GetSourceLabel(ServiceCatalogItem item) =>
+        item.Package?.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase) == true
+            ? LocalizationService.Current.Translate("browser.source.github")
             : LocalizationService.Current.Translate("browser.source.local");
-    }
+}
+
+internal sealed record ServiceCatalogCard
+{
+    public required ServiceCatalogItem Item { get; init; }
+    public required string StateText { get; init; }
+    public required string VersionText { get; init; }
+    public required string DetailsText { get; init; }
+    public required string ActionText { get; init; }
+    public Symbol ActionIcon { get; init; }
+    public bool IsBusy { get; init; }
+    public bool IsDetailsEnabled { get; init; }
+    public bool IsActionEnabled { get; init; }
+    public Visibility ProgressVisibility => IsBusy ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility IconVisibility => IsBusy ? Visibility.Collapsed : Visibility.Visible;
 }
