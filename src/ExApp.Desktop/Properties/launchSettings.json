@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "ExApp.Desktop (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "ExApp.Desktop (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

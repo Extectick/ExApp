@@ -19,89 +19,86 @@ MVP 7 → Updates
 
 Цель: базовое приложение запускается, имеет UI, страницы и tray.
 
-- [x] DONE — создать WinUI 3 проект `MyApp.Desktop`
-- [x] DONE — создать solution
-- [x] DONE — добавить `NavigationView`
-- [x] DONE — добавить страницу `Services`
-- [x] DONE — добавить страницу `Service Browser`
-- [x] DONE — добавить страницу `Settings`
-- [x] DONE — добавить страницу `Diagnostics`
-- [x] DONE — реализовать light/dark/system theme
-- [x] DONE — реализовать en/ru JSON localization
-- [x] DONE — реализовать выбор языка из Windows с fallback на en
-- [x] DONE — добавить настройку языка
-- [x] DONE — реализовать single instance
-- [x] DONE — реализовать tray icon
-- [x] DONE — реализовать поведение “закрыть в трей”
-- [x] DONE — добавить базовое логирование
+- [ ] TODO — создать WinUI 3 проект `ExApp.Desktop`
+- [ ] TODO — создать solution
+- [ ] TODO — добавить `NavigationView`
+- [ ] TODO — добавить страницу `Services`
+- [ ] TODO — добавить страницу `Service Browser`
+- [ ] TODO — добавить страницу `Settings`
+- [ ] TODO — добавить страницу `Diagnostics`
+- [ ] TODO — реализовать light/dark/system theme
+- [ ] TODO — реализовать single instance
+- [ ] TODO — реализовать tray icon
+- [ ] TODO — реализовать поведение “закрыть в трей”
+- [ ] TODO — добавить базовое логирование
 
 Acceptance:
 
-- [x] DONE — приложение запускается без ошибок
-- [x] DONE — повторный запуск активирует существующее окно
-- [x] DONE — окно можно скрыть в трей
-- [ ] REVIEW — страницы переключаются
-- [ ] REVIEW — настройки темы сохраняются
+- [ ] TODO — приложение запускается без ошибок
+- [ ] TODO — повторный запуск активирует существующее окно
+- [ ] TODO — окно можно скрыть в трей
+- [ ] TODO — страницы переключаются
+- [ ] TODO — настройки темы сохраняются
 
 ## MVP 1 — Local Mock Service
 
 Цель: проверить модель сервисов без VPN и сети.
 
-- [x] DONE — создать `MockService`
-- [x] DONE — создать `service.manifest.json`
-- [x] DONE — mock service должен уметь `start`
-- [x] DONE — mock service должен уметь `stop`
-- [x] DONE — mock service должен отдавать `status`
-- [x] DONE — mock service должен писать heartbeat logs
-- [x] DONE — Desktop показывает mock service в списке
+- [ ] TODO — создать `MockService`
+- [ ] TODO — создать `service.manifest.json`
+- [ ] TODO — mock service должен уметь `start`
+- [ ] TODO — mock service должен уметь `stop`
+- [ ] TODO — mock service должен отдавать `status`
+- [ ] TODO — mock service должен писать heartbeat logs
+- [ ] TODO — Desktop показывает mock service в списке
 
 Acceptance:
 
-- [x] DONE — mock service можно установить локально
-- [x] DONE — mock service можно запустить
-- [x] DONE — mock service можно остановить
-- [x] DONE — UI показывает статус
-- [x] DONE — UI показывает последние логи
+- [ ] TODO — mock service можно установить локально
+- [ ] TODO — mock service можно запустить
+- [ ] TODO — mock service можно остановить
+- [ ] TODO — UI показывает статус
+- [ ] TODO — UI показывает последние логи
 
 ## MVP 2 — Package Manager
 
 Цель: реализовать `.svcpkg` установку.
 
-- [x] DONE — определить zip-based формат `.svcpkg`
-- [x] DONE — реализовать manifest parser
-- [x] DONE — реализовать schema validation
-- [x] DONE — реализовать sha256 validation
-- [x] DONE — реализовать staging install
-- [x] DONE — реализовать current pointer
-- [x] DONE — реализовать rollback
-- [x] DONE — реализовать uninstall
-- [x] DONE — реализовать uninstall with data deletion
-- [x] DONE — добавить unit tests
+- [ ] TODO — определить zip-based формат `.svcpkg`
+- [ ] TODO — реализовать manifest parser
+- [ ] TODO — реализовать schema validation
+- [ ] TODO — реализовать sha256 validation
+- [ ] TODO — реализовать staging install
+- [ ] TODO — реализовать current pointer
+- [ ] TODO — реализовать rollback
+- [ ] TODO — реализовать uninstall
+- [ ] TODO — реализовать uninstall with data deletion
+- [ ] TODO — добавить unit tests
 
 ## MVP 3 — Agent + IPC
 
 Цель: UI перестаёт напрямую управлять сервисами.
 
-- [x] DONE — создать `MyApp.Agent`
-- [x] DONE — реализовать Named Pipe server
-- [x] DONE — реализовать Named Pipe client
-- [x] DONE — определить request/response envelope
-- [x] DONE — реализовать команды `service.list/install/uninstall/start/stop/status/logs`
-- [x] DONE — добавить ACL для pipe
+- [ ] TODO — создать `ExApp.Agent`
+- [ ] TODO — реализовать Named Pipe server
+- [ ] TODO — реализовать Named Pipe client
+- [ ] TODO — определить request/response envelope
+- [ ] TODO — реализовать команды `service.list/install/uninstall/start/stop/status/logs`
+- [ ] TODO — добавить ACL для pipe
 
 ## MVP 4 — GitHub Service Catalog
 
 Цель: Браузер сервисов загружает каталог извне.
 
-- [x] DONE — создать `services.stable.json`
-- [x] DONE — создать catalog schema
-- [x] DONE — реализовать catalog downloader
-- [x] DONE — реализовать cache
-- [x] DONE — реализовать offline fallback
-- [x] DONE — показать сервисы из каталога в UI
-- [ ] REVIEW — скачать mock package из GitHub Releases
-- [x] DONE — проверить sha256 перед установкой
-- [x] DONE — добавить basic signature placeholder
+- [ ] TODO — создать `services.stable.json`
+- [ ] TODO — создать catalog schema
+- [ ] TODO — реализовать catalog downloader
+- [ ] TODO — реализовать cache
+- [ ] TODO — реализовать offline fallback
+- [ ] TODO — показать сервисы из каталога в UI
+- [ ] TODO — скачать mock package из GitHub Releases
+- [ ] TODO — проверить sha256 перед установкой
+- [ ] TODO — добавить basic signature placeholder
 
 ## MVP 5 — VPN Service: Static Config
 
@@ -135,11 +132,11 @@ Acceptance:
 
 Цель: обновлять приложение и сервисы.
 
-- [ ] TODO — подключить Velopack к Desktop app
+- [x] DONE — подключить внешний ExApp.Updater к Desktop app
 - [ ] TODO — настроить GitHub Actions release
-- [ ] TODO — добавить app update check
-- [ ] TODO — добавить app update UI
-- [ ] TODO — добавить service update check
-- [ ] TODO — добавить service update install
+- [x] DONE — добавить app update check
+- [x] DONE — добавить app update UI
+- [x] DONE — добавить service update check
+- [x] DONE — добавить service update install и rollback
 - [ ] TODO — добавить service rollback
 - [ ] TODO — добавить stable/beta channel

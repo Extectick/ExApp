@@ -21,7 +21,7 @@ vpn-client-1.0.0-win-x64.svcpkg
 ├── signature.sig
 ├── icon.png
 ├── bin/
-│   ├── MyApp.Service.Vpn.exe
+│   ├── ExApp.Service.Vpn.exe
 │   └── dependencies...
 ├── ui/
 │   └── service-ui.json
@@ -39,7 +39,7 @@ vpn-client-1.0.0-win-x64.svcpkg
       "sha256": "..."
     },
     {
-      "path": "bin/MyApp.Service.Vpn.exe",
+      "path": "bin/ExApp.Service.Vpn.exe",
       "sha256": "..."
     }
   ]
@@ -64,7 +64,7 @@ flowchart TD
 ## Папки
 
 ```text
-%LocalAppData%/MyApp/
+%LocalAppData%/ExApp/
 ├── services/
 │   └── vpn-client/
 │       ├── current/

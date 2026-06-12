@@ -50,18 +50,6 @@
 - [ ] TODO — обновлены чекбоксы
 - [ ] TODO — сценарий проверен вручную
 
-## Localization requirement
-
-Любой пользовательский текст в Desktop UI должен идти через JSON-локализацию.
-
-- [x] DONE — локализация хранится в `src/MyApp.Desktop/Localization/<language>.json`
-- [x] DONE — по умолчанию всегда поддерживаются `en` и `ru`
-- [x] DONE — при первом запуске язык выбирается из предпочтительного языка Windows
-- [x] DONE — если язык Windows не поддержан, используется `en`
-- [x] DONE — язык можно поменять в Settings
-- [ ] TODO — при добавлении новых экранов добавлять ключи минимум в `en.json` и `ru.json`
-- [ ] TODO — не писать пользовательские строки напрямую в XAML/C# без ключа локализации
-
 ## Запрещённые действия для AI
 
 - [ ] TODO — не загружать сервисные DLL внутрь Desktop
@@ -98,7 +86,7 @@
 ```text
 Реализуй MVP 2: Package Manager.
 Добавь формат .svcpkg, manifest parser, sha256 validation, staging install, currentVersion pointer, uninstall и rollback.
-Добавь unit tests для MyApp.Packaging.
+Добавь unit tests для ExApp.Packaging.
 Обнови docs.
 ```
 
@@ -142,7 +130,7 @@ VPN должен быть отдельным service package, запускать
 
 ```text
 Реализуй MVP 7: Updates.
-Подключи Velopack для приложения и отдельные обновления сервисов через catalog.
+Используй внешний ExApp.Updater для приложения и Agent, а сервисы обновляй отдельно через catalog.
 Добавь rollback и update UI.
 Обнови docs.
 ```

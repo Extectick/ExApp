@@ -86,7 +86,7 @@
 ```text
 Реализуй MVP 2: Package Manager.
 Добавь формат .svcpkg, manifest parser, sha256 validation, staging install, currentVersion pointer, uninstall и rollback.
-Добавь unit tests для MyApp.Packaging.
+Добавь unit tests для ExApp.Packaging.
 Обнови docs.
 ```
 
@@ -130,7 +130,7 @@ VPN должен быть отдельным service package, запускать
 
 ```text
 Реализуй MVP 7: Updates.
-Подключи Velopack для приложения и отдельные обновления сервисов через catalog.
+Используй внешний ExApp.Updater для приложения и Agent, а сервисы обновляй отдельно через catalog.
 Добавь rollback и update UI.
 Обнови docs.
 ```

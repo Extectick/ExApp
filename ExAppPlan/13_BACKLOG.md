@@ -109,14 +109,14 @@
 
 ## Epic I — Updates
 
-- [ ] TODO — I001 Add Velopack package
-- [ ] TODO — I002 Initialize Velopack at app startup
-- [ ] TODO — I003 Add app update check
-- [ ] TODO — I004 Add update download/apply UI
+- [x] DONE — I001 Add external ExApp.Updater
+- [x] DONE — I002 Initialize update check at app startup
+- [x] DONE — I003 Add app update check
+- [x] DONE — I004 Add update download/apply UI
 - [ ] TODO — I005 Add GitHub Actions app release
-- [ ] TODO — I006 Add service update detection
-- [ ] TODO — I007 Add service update install
-- [ ] TODO — I008 Add service update rollback
+- [x] DONE — I006 Add service update detection
+- [x] DONE — I007 Add service update install
+- [x] DONE — I008 Add service update rollback
 - [ ] TODO — I009 Add channels
 
 ## Epic J — Security
@@ -140,5 +140,5 @@
 - [ ] TODO — K004 Add services snapshot
 - [ ] TODO — K005 Add logs viewer
 - [ ] TODO — K006 Add export diagnostic bundle
-- [ ] TODO — K007 Add update history
+- [x] DONE — K007 Add update history
 - [ ] TODO — K008 Add integrity check

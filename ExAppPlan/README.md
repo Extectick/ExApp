@@ -1,4 +1,4 @@
-# MyApp Service Platform — план MVP
+# ExApp Service Platform — план MVP
 
 Дата создания: **2026-06-11**
 
@@ -13,8 +13,8 @@
 Базовое приложение не должно содержать всю функциональность внутри себя. Оно должно быть оболочкой и runtime-платформой:
 
 ```text
-MyApp Desktop Shell
-+ MyApp Agent
+ExApp Desktop Shell
++ ExApp Agent
 + Package Manager
 + Service Browser
 + Installed Services Runtime
@@ -33,7 +33,7 @@ vpn-client-1.0.0-win-x64.svcpkg
 |---|---|
 | UI | WinUI 3 + .NET |
 | Фоновая часть | .NET Worker / Agent process, позже Windows Service |
-| Обновления приложения | Velopack + GitHub Releases |
+| Обновления приложения | ExApp.Updater + GitHub Releases |
 | Сервисы | Отдельные подписанные пакеты `.svcpkg` |
 | Запуск сервисов | Отдельные процессы, не DLL внутри UI |
 | IPC | Named Pipes / gRPC over Named Pipes |

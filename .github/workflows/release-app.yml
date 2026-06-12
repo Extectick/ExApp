@@ -1,0 +1,93 @@
+name: Release ExApp
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example app-v0.2.0"
+        required: true
+      channel:
+        description: "Update channel"
+        required: true
+        type: choice
+        options: [stable, beta]
+        default: stable
+  push:
+    tags:
+      - "app-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Resolve release metadata
+        id: release
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+        run: |
+          $version = $env:RELEASE_TAG -replace '^app-v', ''
+          $assemblyVersion = ($version -split '-')[0]
+          $channel = if ($env:INPUT_CHANNEL) { $env:INPUT_CHANNEL } elseif ($version -match '-') { 'beta' } else { 'stable' }
+          "tag=$env:RELEASE_TAG" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "assembly_version=$assemblyVersion" >> $env:GITHUB_OUTPUT
+          "channel=$channel" >> $env:GITHUB_OUTPUT
+
+      - name: Build and test
+        shell: pwsh
+        run: |
+          dotnet restore ExApp.sln
+          dotnet build ExApp.sln --configuration Release --no-restore
+          dotnet test ExApp.sln --configuration Release --no-build
+
+      - name: Package ExApp, Agent and Updater
+        shell: pwsh
+        run: ./tools/package-exapp.ps1 -Version '${{ steps.release.outputs.assembly_version }}'
+
+      - name: Generate update manifest
+        shell: pwsh
+        run: |
+          ./tools/generate-app-update-manifest.ps1 `
+            -Version '${{ steps.release.outputs.assembly_version }}' `
+            -ReleaseTag '${{ steps.release.outputs.tag }}' `
+            -Repository '${{ github.repository }}' `
+            -Channel '${{ steps.release.outputs.channel }}'
+
+      - name: Validate release assets
+        shell: pwsh
+        run: |
+          $manifest = Get-Content -Raw artifacts/app/exapp-update.json | ConvertFrom-Json
+          $package = "artifacts/app/exapp-$($manifest.version)-win-x64.zip"
+          $hash = (Get-FileHash -Algorithm SHA256 $package).Hash.ToLowerInvariant()
+          if ($hash -ne $manifest.package.sha256 -or (Get-Item $package).Length -ne $manifest.package.size) {
+            throw "Application package does not match its update manifest."
+          }
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          prerelease: ${{ steps.release.outputs.channel == 'beta' }}
+          generate_release_notes: true
+          files: |
+            artifacts/app/exapp-*-win-x64.zip
+            artifacts/app/exapp-*-win-x64.zip.sha256
+            artifacts/app/exapp-*-win-x64.zip.size
+            artifacts/app/exapp-update.json
+            schemas/app-update.schema.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

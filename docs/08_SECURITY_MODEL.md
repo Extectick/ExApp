@@ -25,9 +25,9 @@
 
 ```json
 {
-  "publisherId": "myapp",
-  "publisherName": "MyApp",
-  "publicKeyId": "myapp-prod-2026",
+  "publisherId": "exapp",
+  "publisherName": "ExApp",
+  "publicKeyId": "exapp-prod-2026",
   "trusted": true
 }
 ```
@@ -87,7 +87,7 @@ VPN Client запрашивает разрешения:
 Запуск:
 
 ```text
-MyApp.Desktop.exe --safe-mode
+ExApp.Desktop.exe --safe-mode
 ```
 
 В safe mode:

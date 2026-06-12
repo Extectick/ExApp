@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 jobs:
-  mock-service:
+  services:
     runs-on: windows-latest
 
     steps:
@@ -30,50 +30,25 @@ jobs:
       - name: Build and test service platform
         shell: pwsh
         run: |
-          dotnet build src/MyApp.Agent/MyApp.Agent.csproj --configuration Release
-          dotnet build services/MockService/MyApp.Service.MockService.csproj --configuration Release
-          dotnet build services/VpnClient/MyApp.Service.VpnClient.csproj --configuration Release
-          dotnet test tests/MyApp.Packaging.Tests/MyApp.Packaging.Tests.csproj --configuration Release
-          dotnet test tests/MyApp.Ipc.Tests/MyApp.Ipc.Tests.csproj --configuration Release
+          dotnet build src/ExApp.Agent/ExApp.Agent.csproj --configuration Release
+          dotnet build services/MockService/ExApp.Service.MockService.csproj --configuration Release
+          dotnet build services/VpnClient/ExApp.Service.VpnClient.csproj --configuration Release
+          dotnet test tests/ExApp.Packaging.Tests/ExApp.Packaging.Tests.csproj --configuration Release
+          dotnet test tests/ExApp.Ipc.Tests/ExApp.Ipc.Tests.csproj --configuration Release
 
       - name: Build mock service package
         shell: pwsh
         run: ./tools/package-mock-service.ps1 -Configuration Release
 
-      - name: Write package hash
-        id: package
-        shell: pwsh
-        run: |
-          $package = "artifacts/mock-service-0.1.0-win-x64.svcpkg"
-          $hash = (Get-FileHash -Algorithm SHA256 $package).Hash.ToLowerInvariant()
-          $size = (Get-Item $package).Length
-          $hash | Out-File -FilePath artifacts/mock-service-0.1.0-win-x64.sha256 -Encoding ascii
-          $size | Out-File -FilePath artifacts/mock-service-0.1.0-win-x64.size -Encoding ascii
-          "sha256=$hash" >> $env:GITHUB_OUTPUT
-          "size=$size" >> $env:GITHUB_OUTPUT
-          Write-Host "sha256=$hash"
-          Write-Host "size=$size"
-
       - name: Generate release catalog
         shell: pwsh
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-          PACKAGE_SHA256: ${{ steps.package.outputs.sha256 }}
-          PACKAGE_SIZE: ${{ steps.package.outputs.size }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          $catalogPath = "catalog/services.stable.json"
-          $packageName = "mock-service-0.1.0-win-x64.svcpkg"
-          $catalog = Get-Content -Raw $catalogPath | ConvertFrom-Json -Depth 20
-          $mock = $catalog.services | Where-Object { $_.id -eq "mock-service" } | Select-Object -First 1
-          $mock.package.url = "https://github.com/$env:REPOSITORY/releases/download/$env:RELEASE_TAG/$packageName"
-          $mock.package.sha256 = $env:PACKAGE_SHA256
-          $mock.package.size = [int64]$env:PACKAGE_SIZE
-          $catalog.updatedAt = (Get-Date).ToUniversalTime().ToString("o")
-          $catalog.signature.algorithm = "dev-placeholder"
-          $catalog.signature.keyId = "exapp-dev-2026"
-          $catalog.signature.value = "unsigned-dev-catalog"
-          $catalog | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 "artifacts/services.stable.json"
+          ./tools/generate-service-catalog.ps1 `
+            -ReleaseTag $env:RELEASE_TAG `
+            -Repository $env:REPOSITORY
 
       - name: Validate release assets
         shell: pwsh
@@ -92,11 +67,14 @@ jobs:
             }
           }
 
-          $package = "artifacts/mock-service-0.1.0-win-x64.svcpkg"
-          $expectedHash = (Get-Content "artifacts/mock-service-0.1.0-win-x64.sha256" -Raw).Trim()
-          $actualHash = (Get-FileHash -Algorithm SHA256 $package).Hash.ToLowerInvariant()
-          if ($actualHash -ne $expectedHash) {
-            throw "Generated package hash does not match its checksum asset."
+          foreach ($service in $available) {
+            $packageName = [IO.Path]::GetFileName(([uri]$service.package.url).AbsolutePath)
+            $package = Join-Path "artifacts" $packageName
+            $expectedHash = (Get-Content "$package.sha256" -Raw).Trim()
+            $actualHash = (Get-FileHash -Algorithm SHA256 $package).Hash.ToLowerInvariant()
+            if ($actualHash -ne $expectedHash -or $actualHash -ne $service.package.sha256) {
+              throw "Generated package '$packageName' does not match catalog metadata."
+            }
           }
 
       - name: Upload release assets
@@ -104,9 +82,9 @@ jobs:
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
-            artifacts/mock-service-0.1.0-win-x64.svcpkg
-            artifacts/mock-service-0.1.0-win-x64.sha256
-            artifacts/mock-service-0.1.0-win-x64.size
+            artifacts/*.svcpkg
+            artifacts/*.svcpkg.sha256
+            artifacts/*.svcpkg.size
             artifacts/services.stable.json
             schemas/service-catalog.schema.json
         env:

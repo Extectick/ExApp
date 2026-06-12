@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExApp update manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifestVersion", "version", "channel", "publishedAt", "package"],
+  "properties": {
+    "manifestVersion": { "const": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "channel": { "enum": ["stable", "beta"] },
+    "publishedAt": { "type": "string", "format": "date-time" },
+    "releaseNotes": { "type": ["string", "null"] },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "sha256", "size"],
+      "properties": {
+        "url": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "size": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

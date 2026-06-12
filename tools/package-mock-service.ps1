@@ -6,10 +6,12 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$projectPath = Join-Path $repoRoot "services\MockService\MyApp.Service.MockService.csproj"
+$projectPath = Join-Path $repoRoot "services\MockService\ExApp.Service.MockService.csproj"
 $publishRoot = Join-Path $repoRoot "services\MockService\bin\$Configuration\net8.0"
 $manifestPath = Join-Path $repoRoot "services\MockService\service.manifest.json"
-$packageId = "mock-service-0.1.0-win-x64"
+$manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
+$platformToken = if ($manifest.platform -eq "windows") { "win" } else { $manifest.platform }
+$packageId = "$($manifest.id)-$($manifest.version)-$platformToken-$($manifest.architecture)"
 $stagingRoot = Join-Path $repoRoot "artifacts\staging\$packageId"
 $packageOutputDirectory = Join-Path $repoRoot $OutputDirectory
 $packagePath = Join-Path $packageOutputDirectory "$packageId.svcpkg"
@@ -22,10 +24,20 @@ New-Item -ItemType Directory -Force -Path (Join-Path $stagingRoot "bin") | Out-N
 New-Item -ItemType Directory -Force -Path $packageOutputDirectory | Out-Null
 
 Copy-Item -Path $manifestPath -Destination (Join-Path $stagingRoot "service.manifest.json") -Force
-Copy-Item -Path (Join-Path $publishRoot "MyApp.Service.MockService.exe") -Destination (Join-Path $stagingRoot "bin\MyApp.Service.MockService.exe") -Force
-Copy-Item -Path (Join-Path $publishRoot "MyApp.Service.MockService.dll") -Destination (Join-Path $stagingRoot "bin\MyApp.Service.MockService.dll") -Force
-Copy-Item -Path (Join-Path $publishRoot "MyApp.Service.MockService.deps.json") -Destination (Join-Path $stagingRoot "bin\MyApp.Service.MockService.deps.json") -Force
-Copy-Item -Path (Join-Path $publishRoot "MyApp.Service.MockService.runtimeconfig.json") -Destination (Join-Path $stagingRoot "bin\MyApp.Service.MockService.runtimeconfig.json") -Force
+if ($manifest.icon -and -not $manifest.icon.StartsWith("glyph:", [StringComparison]::OrdinalIgnoreCase)) {
+    $iconSource = Join-Path (Split-Path $manifestPath) $manifest.icon
+    if (-not (Test-Path $iconSource -PathType Leaf)) {
+        throw "Manifest icon '$($manifest.icon)' was not found."
+    }
+
+    $iconDestination = Join-Path $stagingRoot $manifest.icon
+    New-Item -ItemType Directory -Force -Path (Split-Path $iconDestination) | Out-Null
+    Copy-Item -Path $iconSource -Destination $iconDestination -Force
+}
+Copy-Item -Path (Join-Path $publishRoot "ExApp.Service.MockService.exe") -Destination (Join-Path $stagingRoot "bin\ExApp.Service.MockService.exe") -Force
+Copy-Item -Path (Join-Path $publishRoot "ExApp.Service.MockService.dll") -Destination (Join-Path $stagingRoot "bin\ExApp.Service.MockService.dll") -Force
+Copy-Item -Path (Join-Path $publishRoot "ExApp.Service.MockService.deps.json") -Destination (Join-Path $stagingRoot "bin\ExApp.Service.MockService.deps.json") -Force
+Copy-Item -Path (Join-Path $publishRoot "ExApp.Service.MockService.runtimeconfig.json") -Destination (Join-Path $stagingRoot "bin\ExApp.Service.MockService.runtimeconfig.json") -Force
 
 $files = Get-ChildItem -Path $stagingRoot -File -Recurse |
     Where-Object { $_.Name -ne "checksums.json" } |

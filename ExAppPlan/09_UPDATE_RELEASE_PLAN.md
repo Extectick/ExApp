@@ -7,18 +7,15 @@
 ## Уровни обновлений
 
 ```text
-Level 1: MyApp Desktop + Agent
+Level 1: ExApp Desktop + Agent
 Level 2: Installed Services
 Level 3: Service Catalog
 ```
 
 ## App updates
 
-Рекомендуемое решение:
-
-```text
-Velopack + GitHub Releases
-```
+Реализован собственный внешний `ExApp.Updater` + GitHub Releases. Desktop и Agent
+поставляются одним пакетом, проверяются по SHA-256 и заменяются только после создания backup.
 
 Поток:
 
@@ -35,16 +32,17 @@ flowchart TD
 
 ## App release checklist
 
-- [ ] TODO — настроить Velopack
-- [ ] TODO — добавить `VelopackApp.Build().Run()` в startup
-- [ ] TODO — добавить update check
-- [ ] TODO — добавить stable channel
-- [ ] TODO — добавить beta channel
-- [ ] TODO — настроить GitHub Actions
-- [ ] TODO — генерировать installer
-- [ ] TODO — генерировать full package
-- [ ] TODO — генерировать delta package
-- [ ] TODO — публиковать GitHub Release
+- [x] DONE — добавить update check
+- [x] DONE — добавить stable channel
+- [x] DONE — добавить beta channel
+- [x] DONE — настроить GitHub Actions
+- [x] DONE — генерировать полный ZIP package
+- [x] DONE — проверять SHA-256 и размер
+- [x] DONE — обновлять Desktop и Agent атомарно
+- [x] DONE — создавать backup и выполнять rollback
+- [x] DONE — публиковать GitHub Release
+- [ ] TODO — добавить подписанный installer
+- [ ] TODO — добавить delta packages при необходимости
 
 ## Service updates
 
@@ -69,22 +67,22 @@ flowchart TD
 
 ## Service release checklist
 
-- [ ] TODO — собрать service binaries
-- [ ] TODO — создать `.svcpkg`
-- [ ] TODO — сгенерировать checksums
+- [x] DONE — собрать service binaries
+- [x] DONE — создать `.svcpkg`
+- [x] DONE — сгенерировать checksums
 - [ ] TODO — подписать package
-- [ ] TODO — загрузить в GitHub Releases
-- [ ] TODO — обновить `services.stable.json`
-- [ ] TODO — проверить catalog schema
+- [x] DONE — загрузить в GitHub Releases
+- [x] DONE — обновить `services.stable.json`
+- [x] DONE — проверить catalog metadata
 - [ ] TODO — подписать catalog
-- [ ] TODO — опубликовать catalog
+- [x] DONE — опубликовать catalog
 
 ## Channels
 
 Сразу заложить:
 
-- [ ] TODO — `stable`
-- [ ] TODO — `beta`
+- [x] DONE — `stable`
+- [x] DONE — `beta` для приложения
 - [ ] TODO — `dev`
 
 ## GitHub repositories
@@ -92,16 +90,16 @@ flowchart TD
 Рекомендуемый вариант:
 
 ```text
-github.com/<owner>/myapp
+github.com/<owner>/exapp
   - основное приложение
   - исходники
   - app releases
 
-github.com/<owner>/myapp-services
+github.com/<owner>/exapp-services
   - service packages
   - service releases
 
-github.com/<owner>/myapp-catalog
+github.com/<owner>/exapp-catalog
   - services.stable.json
   - services.beta.json
 ```
@@ -132,11 +130,11 @@ Catalog: 1
 
 ## Update UI
 
-- [ ] TODO — текущая версия приложения
-- [ ] TODO — текущая версия Agent
-- [ ] TODO — список установленных сервисов и версий
-- [ ] TODO — кнопка “Проверить обновления”
-- [ ] TODO — auto-update toggle
-- [ ] TODO — channel selector
-- [ ] TODO — update history
+- [x] DONE — текущая версия приложения
+- [x] DONE — текущая версия Agent
+- [x] DONE — список установленных сервисов и версий
+- [x] DONE — кнопка “Проверить обновления”
+- [x] DONE — automatic update check toggle
+- [x] DONE — channel selector
+- [x] DONE — update history
 - [ ] TODO — restart required state

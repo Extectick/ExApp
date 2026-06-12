@@ -16,7 +16,7 @@
   "minAgentVersion": "0.1.0",
   "entry": {
     "type": "process",
-    "executable": "bin/MyApp.Service.VpnClient.exe",
+    "executable": "bin/ExApp.Service.VpnClient.exe",
     "arguments": []
   },
   "permissions": [

@@ -46,7 +46,7 @@ vpn-client-1.0.0-win-x64.svcpkg
 ├── checksums.json
 ├── signature.sig
 ├── bin/
-│   ├── MyApp.Service.Vpn.exe
+│   ├── ExApp.Service.Vpn.exe
 │   ├── sing-box.exe
 │   └── dependencies...
 ├── ui/

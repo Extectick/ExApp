@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="ExApp.Desktop.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="ExApp"
+    mc:Ignorable="d">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid x:Name="RootGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="AppTitleBar" Height="32" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+            <StackPanel
+                Margin="12,0,0,0"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="8">
+                <Image
+                    Width="16"
+                    Height="16"
+                    Source="Assets/AppIcon.ico"
+                    Stretch="Uniform" />
+                <TextBlock
+                    x:Name="TitleBarText"
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Text="ExApp" />
+            </StackPanel>
+        </Grid>
+
+        <NavigationView
+            x:Name="RootNavigation"
+            Grid.Row="1"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="True"
+            IsSettingsVisible="False"
+            OpenPaneLength="280"
+            PaneDisplayMode="Auto"
+            SelectionChanged="RootNavigation_SelectionChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem
+                    x:Name="ServicesNavItem"
+                    Content="My services"
+                    Icon="ViewAll"
+                    Tag="services" />
+                <NavigationViewItem
+                    x:Name="BrowserNavItem"
+                    Content="Service Browser"
+                    Icon="Find"
+                    Tag="browser" />
+                <NavigationViewItem
+                    x:Name="DiagnosticsNavItem"
+                    Content="Diagnostics"
+                    Icon="Message"
+                    Tag="diagnostics" />
+            </NavigationView.MenuItems>
+
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem
+                    x:Name="SettingsNavItem"
+                    Content="Settings"
+                    Icon="Setting"
+                    Tag="settings" />
+            </NavigationView.FooterMenuItems>
+
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
+    </Grid>
+</Window>

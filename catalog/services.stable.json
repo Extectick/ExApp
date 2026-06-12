@@ -2,7 +2,7 @@
   "$schema": "../schemas/service-catalog.schema.json",
   "catalogVersion": 1,
   "channel": "stable",
-  "updatedAt": "2026-06-12T00:00:00Z",
+  "updatedAt": "2026-06-12T05:02:01Z",
   "signature": {
     "algorithm": "dev-placeholder",
     "keyId": "exapp-dev-2026",
@@ -13,6 +13,7 @@
       "id": "mock-service",
       "name": "Mock Service",
       "description": "Local validation service for service lifecycle, status and log streaming.",
+      "icon": "glyph:E713",
       "version": "0.1.0",
       "publisher": {
         "id": "exapp",
@@ -24,9 +25,9 @@
       "status": "available",
       "permissions": ["background"],
       "package": {
-        "url": "../artifacts/mock-service-0.1.0-win-x64.svcpkg",
-        "sha256": "a35022ad7892d3cc2097ec61151006bea12bcaf54d659ffa23913906fb2c476c",
-        "size": 78927
+        "url": "https://github.com/Extectick/ExApp/releases/download/services-v0.1.3/mock-service-0.1.0-win-x64.svcpkg",
+        "sha256": "f1e5dc79d3aabd52d8e28468abb32364b7079501599c18638228be894da7b5ce",
+        "size": 76989
       }
     },
     {

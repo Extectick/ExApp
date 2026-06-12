@@ -13,11 +13,13 @@ Build the mock package:
 Install and inspect it with the MVP 2 package tool:
 
 ```powershell
-dotnet run --project tools/MyApp.PackageTool -- install artifacts/mock-service-0.1.0-win-x64.svcpkg
-dotnet run --project tools/MyApp.PackageTool -- list
-dotnet run --project tools/MyApp.PackageTool -- state mock-service
-dotnet run --project tools/MyApp.PackageTool -- rollback mock-service
-dotnet run --project tools/MyApp.PackageTool -- uninstall mock-service --delete-data
+dotnet run --project tools/ExApp.PackageTool -- install artifacts/mock-service-0.1.0-win-x64.svcpkg
+dotnet run --project tools/ExApp.PackageTool -- list
+dotnet run --project tools/ExApp.PackageTool -- state mock-service
+dotnet run --project tools/ExApp.PackageTool -- rollback mock-service
+dotnet run --project tools/ExApp.PackageTool -- uninstall mock-service --delete-data
+
+Application releases use `app-v*` tags. Service releases use `services-v*` tags.
 ```
 
 Use `--root <path>` to operate on an isolated package store instead of `%LocalAppData%\ExApp`.

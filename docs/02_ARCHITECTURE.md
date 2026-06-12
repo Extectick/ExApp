@@ -4,9 +4,9 @@
 
 ```mermaid
 flowchart TD
-    User[Пользователь] --> Desktop[MyApp.Desktop / WinUI 3]
+    User[Пользователь] --> Desktop[ExApp.Desktop / WinUI 3]
     Desktop --> IPC1[IPC: Named Pipes]
-    IPC1 --> Agent[MyApp.Agent]
+    IPC1 --> Agent[ExApp.Agent]
     Agent --> PackageManager[Package Manager]
     Agent --> ServiceRuntime[Service Runtime]
     Agent --> UpdateManager[Update Manager]
@@ -18,7 +18,7 @@ flowchart TD
 
 ## Компоненты
 
-### MyApp.Desktop
+### ExApp.Desktop
 
 Назначение:
 
@@ -46,7 +46,7 @@ flowchart TD
 - [ ] TODO — реализовать tray behavior
 - [ ] TODO — подключить IPC client
 
-### MyApp.Agent
+### ExApp.Agent
 
 Назначение:
 

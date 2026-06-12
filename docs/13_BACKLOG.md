@@ -2,27 +2,23 @@
 
 ## Epic A — Desktop Shell
 
-- [x] DONE — A001 Create WinUI 3 project
-- [x] DONE — A002 Add NavigationView
-- [x] DONE — A003 Add Services page
-- [x] DONE — A004 Add Service Browser page
-- [x] DONE — A005 Add Settings page
-- [x] DONE — A006 Add Diagnostics page
-- [x] DONE — A007 Add theme switching
-- [x] DONE — A008 Add single instance
-- [x] DONE — A009 Add tray icon
-- [x] DONE — A010 Add close-to-tray behavior
+- [ ] TODO — A001 Create WinUI 3 project
+- [ ] TODO — A002 Add NavigationView
+- [ ] TODO — A003 Add Services page
+- [ ] TODO — A004 Add Service Browser page
+- [ ] TODO — A005 Add Settings page
+- [ ] TODO — A006 Add Diagnostics page
+- [ ] TODO — A007 Add theme switching
+- [ ] TODO — A008 Add single instance
+- [ ] TODO — A009 Add tray icon
+- [ ] TODO — A010 Add close-to-tray behavior
 - [ ] TODO — A011 Add basic app notifications
 - [ ] TODO — A012 Add logs viewer component
-- [x] DONE — A013 Add JSON localization foundation
-- [x] DONE — A014 Add en/ru localization files
-- [x] DONE — A015 Add language selector in Settings
-- [x] DONE — A016 Use Windows language with en fallback
 
 ## Epic B — Core Contracts
 
-- [x] DONE — B001 Define ServiceState enum
-- [x] DONE — B002 Define ServiceStatus DTO
+- [ ] TODO — B001 Define ServiceState enum
+- [ ] TODO — B002 Define ServiceStatus DTO
 - [ ] TODO — B003 Define Result/Error model
 - [ ] TODO — B004 Define Version compatibility helpers
 - [ ] TODO — B005 Define Permission model
@@ -34,64 +30,64 @@
 
 ## Epic C — Mock Service
 
-- [x] DONE — C001 Create MockService executable
-- [x] DONE — C002 Add mock manifest
-- [x] DONE — C003 Add start command
-- [x] DONE — C004 Add stop command
-- [x] DONE — C005 Add status command
-- [x] DONE — C006 Add heartbeat logs
-- [x] DONE — C007 Package as local `.svcpkg`
+- [ ] TODO — C001 Create MockService executable
+- [ ] TODO — C002 Add mock manifest
+- [ ] TODO — C003 Add start command
+- [ ] TODO — C004 Add stop command
+- [ ] TODO — C005 Add status command
+- [ ] TODO — C006 Add heartbeat logs
+- [ ] TODO — C007 Package as local `.svcpkg`
 
 ## Epic D — Package Manager
 
-- [x] DONE — D001 Define `.svcpkg` structure
-- [x] DONE — D002 Implement package reader
-- [x] DONE — D003 Implement manifest validation
-- [x] DONE — D004 Implement checksum validation
-- [x] DONE — D005 Implement staging install
-- [x] DONE — D006 Implement currentVersion pointer
-- [x] DONE — D007 Implement rollback
-- [x] DONE — D008 Implement uninstall
-- [x] DONE — D009 Implement package cache
-- [x] DONE — D010 Add tests
+- [ ] TODO — D001 Define `.svcpkg` structure
+- [ ] TODO — D002 Implement package reader
+- [ ] TODO — D003 Implement manifest validation
+- [ ] TODO — D004 Implement checksum validation
+- [ ] TODO — D005 Implement staging install
+- [ ] TODO — D006 Implement currentVersion pointer
+- [ ] TODO — D007 Implement rollback
+- [ ] TODO — D008 Implement uninstall
+- [ ] TODO — D009 Implement package cache
+- [ ] TODO — D010 Add tests
 
 ## Epic E — Agent + IPC
 
-- [x] DONE — E001 Create Agent project
-- [x] DONE — E002 Add Named Pipe server
-- [x] DONE — E003 Add Named Pipe client
-- [x] DONE — E004 Add service.list
-- [x] DONE — E005 Add service.install
-- [x] DONE — E006 Add service.uninstall
-- [x] DONE — E007 Add service.start
-- [x] DONE — E008 Add service.stop
-- [x] DONE — E009 Add service.status
-- [x] DONE — E010 Add service.logs
-- [x] DONE — E011 Add pipe ACL
-- [x] DONE — E012 Add Agent auto-start strategy
+- [ ] TODO — E001 Create Agent project
+- [ ] TODO — E002 Add Named Pipe server
+- [ ] TODO — E003 Add Named Pipe client
+- [ ] TODO — E004 Add service.list
+- [ ] TODO — E005 Add service.install
+- [ ] TODO — E006 Add service.uninstall
+- [ ] TODO — E007 Add service.start
+- [ ] TODO — E008 Add service.stop
+- [ ] TODO — E009 Add service.status
+- [ ] TODO — E010 Add service.logs
+- [ ] TODO — E011 Add pipe ACL
+- [ ] TODO — E012 Add Agent auto-start strategy
 
 ## Epic F — Service Runtime
 
-- [x] DONE — F001 Add service registry
-- [x] DONE — F002 Add process launcher
-- [x] DONE — F003 Add process monitor
-- [x] DONE — F004 Add health checks
-- [x] DONE — F005 Add crash detection
-- [x] DONE — F006 Add restart policy
-- [x] DONE — F007 Add safe mode
-- [x] DONE — F008 Add service logs routing
+- [ ] TODO — F001 Add service registry
+- [ ] TODO — F002 Add process launcher
+- [ ] TODO — F003 Add process monitor
+- [ ] TODO — F004 Add health checks
+- [ ] TODO — F005 Add crash detection
+- [ ] TODO — F006 Add restart policy
+- [ ] TODO — F007 Add safe mode
+- [ ] TODO — F008 Add service logs routing
 
 ## Epic G — Service Catalog
 
-- [x] DONE — G001 Define catalog schema
-- [x] DONE — G002 Create services.stable.json
-- [x] DONE — G003 Add catalog downloader
-- [x] DONE — G004 Add catalog cache
-- [x] DONE — G005 Add offline fallback
-- [x] DONE — G006 Show catalog in Browser
-- [x] DONE — G007 Install package from URL
-- [x] DONE — G008 Validate catalog package hash
-- [x] DONE — G009 Prepare catalog signing placeholder
+- [ ] TODO — G001 Define catalog schema
+- [ ] TODO — G002 Create services.stable.json
+- [ ] TODO — G003 Add catalog downloader
+- [ ] TODO — G004 Add catalog cache
+- [ ] TODO — G005 Add offline fallback
+- [ ] TODO — G006 Show catalog in Browser
+- [ ] TODO — G007 Install package from URL
+- [ ] TODO — G008 Validate catalog package hash
+- [ ] TODO — G009 Prepare catalog signing placeholder
 
 ## Epic H — VPN Service
 
@@ -113,14 +109,14 @@
 
 ## Epic I — Updates
 
-- [ ] TODO — I001 Add Velopack package
-- [ ] TODO — I002 Initialize Velopack at app startup
-- [ ] TODO — I003 Add app update check
-- [ ] TODO — I004 Add update download/apply UI
+- [x] DONE — I001 Add external ExApp.Updater
+- [x] DONE — I002 Initialize update check at app startup
+- [x] DONE — I003 Add app update check
+- [x] DONE — I004 Add update download/apply UI
 - [ ] TODO — I005 Add GitHub Actions app release
-- [ ] TODO — I006 Add service update detection
-- [ ] TODO — I007 Add service update install
-- [ ] TODO — I008 Add service update rollback
+- [x] DONE — I006 Add service update detection
+- [x] DONE — I007 Add service update install
+- [x] DONE — I008 Add service update rollback
 - [ ] TODO — I009 Add channels
 
 ## Epic J — Security
@@ -144,5 +140,5 @@
 - [ ] TODO — K004 Add services snapshot
 - [ ] TODO — K005 Add logs viewer
 - [ ] TODO — K006 Add export diagnostic bundle
-- [ ] TODO — K007 Add update history
+- [x] DONE — K007 Add update history
 - [ ] TODO — K008 Add integrity check

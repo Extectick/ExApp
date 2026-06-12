@@ -19,7 +19,7 @@ MVP 7 → Updates
 
 Цель: базовое приложение запускается, имеет UI, страницы и tray.
 
-- [ ] TODO — создать WinUI 3 проект `MyApp.Desktop`
+- [ ] TODO — создать WinUI 3 проект `ExApp.Desktop`
 - [ ] TODO — создать solution
 - [ ] TODO — добавить `NavigationView`
 - [ ] TODO — добавить страницу `Services`
@@ -79,7 +79,7 @@ Acceptance:
 
 Цель: UI перестаёт напрямую управлять сервисами.
 
-- [ ] TODO — создать `MyApp.Agent`
+- [ ] TODO — создать `ExApp.Agent`
 - [ ] TODO — реализовать Named Pipe server
 - [ ] TODO — реализовать Named Pipe client
 - [ ] TODO — определить request/response envelope
@@ -132,11 +132,11 @@ Acceptance:
 
 Цель: обновлять приложение и сервисы.
 
-- [ ] TODO — подключить Velopack к Desktop app
+- [x] DONE — подключить внешний ExApp.Updater к Desktop app
 - [ ] TODO — настроить GitHub Actions release
-- [ ] TODO — добавить app update check
-- [ ] TODO — добавить app update UI
-- [ ] TODO — добавить service update check
-- [ ] TODO — добавить service update install
+- [x] DONE — добавить app update check
+- [x] DONE — добавить app update UI
+- [x] DONE — добавить service update check
+- [x] DONE — добавить service update install и rollback
 - [ ] TODO — добавить service rollback
 - [ ] TODO — добавить stable/beta channel

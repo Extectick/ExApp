@@ -14,12 +14,14 @@
 - [x] DONE — реализован Package Manager
 - [x] DONE — подключён GitHub service catalog
 - [ ] TODO — реализован первый VPN service
-- [ ] TODO — подключены обновления через Velopack
+- [x] DONE — подключены обновления ExApp Desktop + Agent через GitHub Releases
+- [x] DONE — подключены независимые обновления сервисов через service catalog
 
 ## Сейчас выполняется
 
 - [ ] DOING — реализовать первый VPN service со статической конфигурацией
 - [ ] REVIEW — проверить публикацию service package через GitHub Releases
+- [ ] REVIEW — опубликовать первый `app-v*` release и проверить обновление между двумя опубликованными версиями
 
 ## Следующий лучший шаг
 
@@ -46,4 +48,4 @@
 | MVP 4 | REVIEW | GitHub service catalog |
 | MVP 5 | DOING | VPN service без подписок |
 | MVP 6 | TODO | VPN subscription URL |
-| MVP 7 | TODO | обновления приложения и сервисов |
+| MVP 7 | REVIEW | обновления приложения, Agent и сервисов реализованы; требуется проверка публичного release |

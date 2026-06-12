@@ -12,24 +12,20 @@
 - [x] DONE — создан Agent
 - [x] DONE — реализован локальный mock service
 - [x] DONE — реализован Package Manager
-- [x] DONE — добавлен базовый Service Runtime
-- [ ] REVIEW — подключён GitHub service catalog
+- [x] DONE — подключён GitHub service catalog
 - [ ] TODO — реализован первый VPN service
-- [ ] TODO — подключены обновления через Velopack
+- [x] DONE — подключены обновления ExApp Desktop + Agent через GitHub Releases
+- [x] DONE — подключены независимые обновления сервисов через service catalog
 
 ## Сейчас выполняется
 
-- [x] DONE — подготовить репозиторий и базовые проекты
-- [x] DONE — перенести этот план в `/docs`
-- [ ] REVIEW — реализовать MVP 0 Desktop Skeleton
-- [ ] REVIEW — реализовать MVP 1 Local Mock Service
-- [x] DONE — реализовать MVP 2 Package Manager
-- [x] DONE — реализовать MVP 3 Agent + IPC
-- [x] DONE — стабилизировать Service Runtime
+- [ ] DOING — реализовать первый VPN service со статической конфигурацией
+- [ ] REVIEW — проверить публикацию service package через GitHub Releases
+- [ ] REVIEW — опубликовать первый `app-v*` release и проверить обновление между двумя опубликованными версиями
 
 ## Следующий лучший шаг
 
-Завершить **MVP 4 — GitHub Service Catalog** из [`04_MVP_ROADMAP.md`](04_MVP_ROADMAP.md): подключить реальный GitHub Releases URL для mock package и добавить basic catalog signing placeholder.
+Завершить **MVP 5 — VPN Service: Static Config** из [`04_MVP_ROADMAP.md`](04_MVP_ROADMAP.md).
 
 ## Правила обновления статуса
 
@@ -45,11 +41,11 @@
 
 | Milestone | Статус | Смысл |
 |---|---:|---|
-| MVP 0 | REVIEW | WinUI shell, tray, settings, empty services UI |
-| MVP 1 | REVIEW | локальный mock service |
+| MVP 0 | DONE | WinUI shell, tray, settings, empty services UI |
+| MVP 1 | DONE | локальный mock service |
 | MVP 2 | DONE | package manager и `.svcpkg` |
 | MVP 3 | DONE | Agent + IPC |
 | MVP 4 | REVIEW | GitHub service catalog |
-| MVP 5 | TODO | VPN service без подписок |
+| MVP 5 | DOING | VPN service без подписок |
 | MVP 6 | TODO | VPN subscription URL |
-| MVP 7 | TODO | обновления приложения и сервисов |
+| MVP 7 | REVIEW | обновления приложения, Agent и сервисов реализованы; требуется проверка публичного release |

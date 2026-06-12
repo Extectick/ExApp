@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="ExApp.Desktop.Pages.DiagnosticsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid x:Name="RootGrid" Padding="28" RowSpacing="18">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState x:Name="WideLayout">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="720" />
+                    </VisualState.StateTriggers>
+                </VisualState>
+                <VisualState x:Name="NarrowLayout">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="RootGrid.Padding" Value="16" />
+                        <Setter Target="SummaryGrid.ColumnSpacing" Value="8" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="TitleText" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock x:Name="SubtitleText" Opacity="0.72" TextWrapping="Wrap" />
+            </StackPanel>
+            <Button
+                x:Name="ExportButton"
+                Grid.Column="1"
+                Click="ExportButton_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE74E;" />
+                    <TextBlock x:Name="ExportButtonText" />
+                </StackPanel>
+            </Button>
+            <Button
+                x:Name="RefreshButton"
+                Grid.Column="2"
+                Click="RefreshButton_Click">
+                <SymbolIcon Symbol="Refresh" />
+            </Button>
+        </Grid>
+
+        <InfoBar
+            x:Name="OperationInfoBar"
+            Grid.RowSpan="4"
+            Canvas.ZIndex="10"
+            MaxWidth="720"
+            Margin="0,54,0,0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            IsClosable="True"
+            IsOpen="False" />
+
+        <Grid x:Name="SummaryGrid" Grid.Row="1" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8">
+                <StackPanel Spacing="3">
+                    <TextBlock x:Name="InstalledLabelText" Opacity="0.72" />
+                    <TextBlock x:Name="InstalledValueText" FontSize="24" FontWeight="SemiBold" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8">
+                <StackPanel Spacing="3">
+                    <TextBlock x:Name="RunningLabelText" Opacity="0.72" />
+                    <TextBlock x:Name="RunningValueText" FontSize="24" FontWeight="SemiBold" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8">
+                <StackPanel Spacing="3">
+                    <TextBlock x:Name="FailedLabelText" Opacity="0.72" />
+                    <TextBlock x:Name="FailedValueText" FontSize="24" FontWeight="SemiBold" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="2" ColumnSpacing="24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="2">
+                <TextBlock x:Name="AgentLabelText" Opacity="0.72" />
+                <TextBlock x:Name="AgentStatusText" FontWeight="SemiBold" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="2">
+                <TextBlock x:Name="VersionLabelText" Opacity="0.72" />
+                <TextBlock x:Name="AgentVersionText" FontWeight="SemiBold" />
+            </StackPanel>
+            <StackPanel Grid.Column="2" Spacing="2">
+                <TextBlock x:Name="RootLabelText" Opacity="0.72" />
+                <TextBlock x:Name="RootPathText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="3">
+            <ListView
+                x:Name="ServicesList"
+                ItemsSource="{x:Bind Services}"
+                SelectionMode="None">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Padding="10,8" ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                <TextBlock Opacity="0.72" Text="{Binding Message}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock FontWeight="SemiBold" Text="{Binding State}" />
+                                <TextBlock Opacity="0.72" Text="{Binding LastError}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="{Binding ProcessText}" />
+                            <TextBlock Grid.Column="3" VerticalAlignment="Center" Text="{Binding UptimeText}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <StackPanel
+                x:Name="LoadingPanel"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="10">
+                <ProgressRing Width="32" Height="32" IsActive="True" />
+                <TextBlock x:Name="LoadingText" Opacity="0.72" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Page>

@@ -3,18 +3,18 @@
 ## Рекомендуемый mono-repo
 
 ```text
-myapp/
+exapp/
 ├── README.md
 ├── docs/
 ├── src/
-│   ├── MyApp.Desktop/
-│   ├── MyApp.Agent/
-│   ├── MyApp.Core/
-│   ├── MyApp.Ipc/
-│   ├── MyApp.Packaging/
-│   ├── MyApp.ServiceRuntime/
-│   ├── MyApp.Updater/
-│   └── MyApp.Diagnostics/
+│   ├── ExApp.Desktop/
+│   ├── ExApp.Agent/
+│   ├── ExApp.Core/
+│   ├── ExApp.Ipc/
+│   ├── ExApp.Packaging/
+│   ├── ExApp.ServiceRuntime/
+│   ├── ExApp.Updater/
+│   └── ExApp.Diagnostics/
 ├── services/
 │   ├── MockService/
 │   └── VpnClient/
@@ -29,7 +29,7 @@ myapp/
 
 ## Проекты
 
-### MyApp.Desktop
+### ExApp.Desktop
 
 - [ ] TODO — WinUI 3 приложение
 - [ ] TODO — MVVM структура
@@ -38,7 +38,7 @@ myapp/
 - [ ] TODO — tray
 - [ ] TODO — notification wrapper
 
-### MyApp.Agent
+### ExApp.Agent
 
 - [ ] TODO — Worker service
 - [ ] TODO — IPC server
@@ -46,7 +46,7 @@ myapp/
 - [ ] TODO — package manager host
 - [ ] TODO — service process host
 
-### MyApp.Core
+### ExApp.Core
 
 - [ ] TODO — общие DTO
 - [ ] TODO — enums
@@ -54,7 +54,7 @@ myapp/
 - [ ] TODO — result/error model
 - [ ] TODO — common exceptions
 
-### MyApp.Ipc
+### ExApp.Ipc
 
 - [ ] TODO — named pipe contracts
 - [ ] TODO — request/response envelope
@@ -62,7 +62,7 @@ myapp/
 - [ ] TODO — cancellation
 - [ ] TODO — auth/ACL для pipe
 
-### MyApp.Packaging
+### ExApp.Packaging
 
 - [ ] TODO — `.svcpkg` reader
 - [ ] TODO — manifest validator
@@ -70,7 +70,7 @@ myapp/
 - [ ] TODO — signature validator
 - [ ] TODO — install/rollback logic
 
-### MyApp.ServiceRuntime
+### ExApp.ServiceRuntime
 
 - [ ] TODO — service registry
 - [ ] TODO — service process launcher
@@ -80,15 +80,15 @@ myapp/
 
 ## Правила именования
 
-- Project names: `MyApp.ComponentName`
+- Project names: `ExApp.ComponentName`
 - Service package ID: kebab-case, например `vpn-client`
-- Service process name: `MyApp.Service.<Name>.exe`
+- Service process name: `ExApp.Service.<Name>.exe`
 - DTO suffix: `Request`, `Response`, `Dto`
 - Commands: dot notation, например `service.install`, `vpn.start`
 
 ## Первые задачи в репозитории
 
-- [x] DONE — создать solution `MyApp.sln`
+- [x] DONE — создать solution `ExApp.sln`
 - [x] DONE — создать проекты из `src/`
 - [x] DONE — добавить `Directory.Build.props`
 - [x] DONE — включить nullable

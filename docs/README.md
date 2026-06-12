@@ -33,7 +33,7 @@ vpn-client-1.0.0-win-x64.svcpkg
 |---|---|
 | UI | WinUI 3 + .NET |
 | Фоновая часть | .NET Worker / Agent process, позже Windows Service |
-| Обновления приложения | Velopack + GitHub Releases |
+| Обновления приложения | ExApp.Updater + GitHub Releases |
 | Сервисы | Отдельные подписанные пакеты `.svcpkg` |
 | Запуск сервисов | Отдельные процессы, не DLL внутри UI |
 | IPC | Named Pipes / gRPC over Named Pipes |

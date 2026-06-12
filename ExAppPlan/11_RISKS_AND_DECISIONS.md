@@ -78,11 +78,11 @@ Reason:
 - лучше подходит под subscription links;
 - WireGuard можно добавить как отдельный режим позже.
 
-### ADR-007 — Velopack for app updates
+### ADR-007 — External updater for app updates
 
 Status: Accepted
 
-- [x] DONE — использовать Velopack + GitHub Releases для обновлений приложения
+- [x] DONE — использовать ExApp.Updater + GitHub Releases для обновлений приложения и Agent
 
 ## Risk register
 

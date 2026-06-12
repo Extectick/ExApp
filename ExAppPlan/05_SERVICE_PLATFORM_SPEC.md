@@ -5,7 +5,7 @@
 Каждый сервис — отдельный устанавливаемый пакет и отдельный процесс.
 
 ```text
-MyApp.Agent
+ExApp.Agent
 └── starts/stops
     └── services/<service-id>/current/bin/<service-exe>
 ```
@@ -80,8 +80,8 @@ stateDiagram-v2
   "description": "VPN-клиент с поддержкой subscription URL.",
   "version": "1.0.0",
   "publisher": {
-    "id": "myapp",
-    "name": "MyApp"
+    "id": "exapp",
+    "name": "ExApp"
   },
   "category": "network",
   "platform": "windows",
@@ -91,7 +91,7 @@ stateDiagram-v2
   "minAgentVersion": "0.1.0",
   "entry": {
     "type": "process",
-    "executable": "bin/MyApp.Service.Vpn.exe",
+    "executable": "bin/ExApp.Service.Vpn.exe",
     "arguments": []
   },
   "ui": {
@@ -111,7 +111,7 @@ stateDiagram-v2
 
 ## Permission model
 
-Важно: permissions — это внутренняя модель MyApp, а не полноценная Windows sandbox.
+Важно: permissions — это внутренняя модель ExApp, а не полноценная Windows sandbox.
 
 Поддерживаемые permissions:
 

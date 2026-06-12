@@ -3,6 +3,7 @@
   "id": "mock-service",
   "name": "Mock Service",
   "description": "Local mock service for validating the ExApp service lifecycle.",
+  "icon": "glyph:E713",
   "version": "0.1.0",
   "publisher": {
     "id": "exapp",
@@ -16,7 +17,7 @@
   "minAgentVersion": "0.1.0",
   "entry": {
     "type": "process",
-    "executable": "bin/MyApp.Service.MockService.exe",
+    "executable": "bin/ExApp.Service.MockService.exe",
     "arguments": []
   },
   "permissions": [
