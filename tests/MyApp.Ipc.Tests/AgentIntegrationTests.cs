@@ -19,8 +19,9 @@ public sealed class AgentIntegrationTests : IAsyncLifetime
         }
 
         var repositoryRoot = FindRepositoryRoot();
-        var agentExecutable = Path.Combine(repositoryRoot, "src", "MyApp.Agent", "bin", "Debug", "net8.0", "MyApp.Agent.exe");
-        var mockExecutable = Path.Combine(repositoryRoot, "services", "MockService", "bin", "Debug", "net8.0", "MyApp.Service.MockService.exe");
+        var configuration = GetBuildConfiguration();
+        var agentExecutable = Path.Combine(repositoryRoot, "src", "MyApp.Agent", "bin", configuration, "net8.0", "MyApp.Agent.exe");
+        var mockExecutable = Path.Combine(repositoryRoot, "services", "MockService", "bin", configuration, "net8.0", "MyApp.Service.MockService.exe");
         Assert.True(File.Exists(agentExecutable), $"Agent executable not found at {agentExecutable}");
         Assert.True(File.Exists(mockExecutable), $"Mock executable not found at {mockExecutable}");
 
@@ -151,7 +152,7 @@ public sealed class AgentIntegrationTests : IAsyncLifetime
     private string CreateMockPackage()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var sourceBin = Path.Combine(repositoryRoot, "services", "MockService", "bin", "Debug", "net8.0");
+        var sourceBin = Path.Combine(repositoryRoot, "services", "MockService", "bin", GetBuildConfiguration(), "net8.0");
         var staging = Path.Combine(_runtimeRoot, "package-source");
         var packageBin = Path.Combine(staging, "bin");
         Directory.CreateDirectory(packageBin);
@@ -181,6 +182,22 @@ public sealed class AgentIntegrationTests : IAsyncLifetime
         var packagePath = Path.Combine(_runtimeRoot, "mock-service.svcpkg");
         ZipFile.CreateFromDirectory(staging, packagePath);
         return packagePath;
+    }
+
+    private static string GetBuildConfiguration()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (current.Name is "Debug" or "Release")
+            {
+                return current.Name;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Build configuration was not found in the test output path.");
     }
 
     private void KillMockServiceProcess()
