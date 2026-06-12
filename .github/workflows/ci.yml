@@ -23,7 +23,17 @@ jobs:
         run: dotnet restore ExApp.sln
 
       - name: Build
-        run: dotnet build ExApp.sln --configuration Debug --no-restore
+        shell: pwsh
+        run: |
+          dotnet build src/ExApp.Desktop/ExApp.Desktop.csproj --configuration Debug -p:Platform=x64
+          dotnet build src/ExApp.Agent/ExApp.Agent.csproj --configuration Debug --no-restore
+          dotnet build services/MockService/ExApp.Service.MockService.csproj --configuration Debug --no-restore
+          dotnet build services/VpnClient/ExApp.Service.VpnClient.csproj --configuration Debug --no-restore
+          dotnet build tests/ExApp.Packaging.Tests/ExApp.Packaging.Tests.csproj --configuration Debug --no-restore
+          dotnet build tests/ExApp.Ipc.Tests/ExApp.Ipc.Tests.csproj --configuration Debug --no-restore
 
       - name: Test
-        run: dotnet test ExApp.sln --configuration Debug --no-build
+        shell: pwsh
+        run: |
+          dotnet test tests/ExApp.Packaging.Tests/ExApp.Packaging.Tests.csproj --configuration Debug --no-build
+          dotnet test tests/ExApp.Ipc.Tests/ExApp.Ipc.Tests.csproj --configuration Debug --no-build
