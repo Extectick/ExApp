@@ -1,0 +1,34 @@
+{
+  "manifestVersion": 1,
+  "id": "vpn-client",
+  "name": "VPN Client",
+  "description": "VPN service powered by sing-box with isolated lifecycle and logs.",
+  "version": "0.1.0",
+  "publisher": {
+    "id": "exapp",
+    "name": "ExApp"
+  },
+  "category": "network",
+  "platform": "windows",
+  "architecture": "x64",
+  "apiVersion": 1,
+  "minAppVersion": "0.1.0",
+  "minAgentVersion": "0.1.0",
+  "entry": {
+    "type": "process",
+    "executable": "bin/MyApp.Service.VpnClient.exe",
+    "arguments": []
+  },
+  "permissions": [
+    "network",
+    "background",
+    "tun",
+    "dns",
+    "routes",
+    "admin"
+  ],
+  "requiresAdmin": true,
+  "dataPolicy": {
+    "preserveOnUninstall": true
+  }
+}

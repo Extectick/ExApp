@@ -32,6 +32,7 @@ jobs:
         run: |
           dotnet build src/MyApp.Agent/MyApp.Agent.csproj --configuration Release
           dotnet build services/MockService/MyApp.Service.MockService.csproj --configuration Release
+          dotnet build services/VpnClient/MyApp.Service.VpnClient.csproj --configuration Release
           dotnet test tests/MyApp.Packaging.Tests/MyApp.Packaging.Tests.csproj --configuration Release
           dotnet test tests/MyApp.Ipc.Tests/MyApp.Ipc.Tests.csproj --configuration Release
 
@@ -46,8 +47,8 @@ jobs:
           $package = "artifacts/mock-service-0.1.0-win-x64.svcpkg"
           $hash = (Get-FileHash -Algorithm SHA256 $package).Hash.ToLowerInvariant()
           $size = (Get-Item $package).Length
-          "sha256=$hash" | Out-File -FilePath artifacts/mock-service-0.1.0-win-x64.sha256 -Encoding ascii
-          "size=$size" | Out-File -FilePath artifacts/mock-service-0.1.0-win-x64.size -Encoding ascii
+          $hash | Out-File -FilePath artifacts/mock-service-0.1.0-win-x64.sha256 -Encoding ascii
+          $size | Out-File -FilePath artifacts/mock-service-0.1.0-win-x64.size -Encoding ascii
           "sha256=$hash" >> $env:GITHUB_OUTPUT
           "size=$size" >> $env:GITHUB_OUTPUT
           Write-Host "sha256=$hash"

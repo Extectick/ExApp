@@ -1,29 +1,29 @@
 # 00 — Текущий статус проекта
 
-Дата: **2026-06-11**
+Дата: **2026-06-12**
 
 ## Глобальный статус
 
 - [x] DONE — сформирована целевая архитектура
 - [x] DONE — выбран базовый стек
 - [x] DONE — определена MVP-стратегия
-- [ ] TODO — создан репозиторий
-- [ ] TODO — создано WinUI 3 приложение
-- [ ] TODO — создан Agent
-- [ ] TODO — реализован локальный mock service
-- [ ] TODO — реализован Package Manager
-- [ ] TODO — подключён GitHub service catalog
+- [x] DONE — создан репозиторий
+- [x] DONE — создано WinUI 3 приложение
+- [x] DONE — создан Agent
+- [x] DONE — реализован локальный mock service
+- [x] DONE — реализован Package Manager
+- [x] DONE — подключён GitHub service catalog
 - [ ] TODO — реализован первый VPN service
 - [ ] TODO — подключены обновления через Velopack
 
 ## Сейчас выполняется
 
-- [ ] DOING — подготовить репозиторий и базовые проекты
-- [ ] DOING — перенести этот план в `/docs`
+- [ ] DOING — реализовать первый VPN service со статической конфигурацией
+- [ ] REVIEW — проверить публикацию service package через GitHub Releases
 
 ## Следующий лучший шаг
 
-Создать mono-repo со структурой из [`03_REPOSITORY_STRUCTURE.md`](03_REPOSITORY_STRUCTURE.md), затем реализовать **MVP 0 — Skeleton** из [`04_MVP_ROADMAP.md`](04_MVP_ROADMAP.md).
+Завершить **MVP 5 — VPN Service: Static Config** из [`04_MVP_ROADMAP.md`](04_MVP_ROADMAP.md).
 
 ## Правила обновления статуса
 
@@ -39,11 +39,11 @@
 
 | Milestone | Статус | Смысл |
 |---|---:|---|
-| MVP 0 | TODO | WinUI shell, tray, settings, empty services UI |
-| MVP 1 | TODO | локальный mock service |
-| MVP 2 | TODO | package manager и `.svcpkg` |
-| MVP 3 | TODO | Agent + IPC |
-| MVP 4 | TODO | GitHub service catalog |
-| MVP 5 | TODO | VPN service без подписок |
+| MVP 0 | DONE | WinUI shell, tray, settings, empty services UI |
+| MVP 1 | DONE | локальный mock service |
+| MVP 2 | DONE | package manager и `.svcpkg` |
+| MVP 3 | DONE | Agent + IPC |
+| MVP 4 | REVIEW | GitHub service catalog |
+| MVP 5 | DOING | VPN service без подписок |
 | MVP 6 | TODO | VPN subscription URL |
 | MVP 7 | TODO | обновления приложения и сервисов |
