@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-Add-Type -Language CSharp -ReferencedAssemblies @("System.IO.Compression", "System.IO.Compression.FileSystem", "System.Security.Cryptography", "System.Text.Json") -TypeDefinition @'
+Add-Type -Language CSharp -TypeDefinition @'
 using System;
 using System.IO;
 using System.IO.Compression;
