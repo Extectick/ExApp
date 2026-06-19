@@ -1,6 +1,6 @@
 # 00 — Текущий статус проекта
 
-Дата: **2026-06-12**
+Дата: **2026-06-19**
 
 ## Глобальный статус
 
@@ -15,13 +15,15 @@
 - [x] DONE — подключён GitHub service catalog
 - [ ] TODO — реализован первый VPN service
 - [x] DONE — подключены обновления ExApp Desktop + Agent через GitHub Releases
+- [x] DONE — добавлен MSI installer для первичной установки ExApp
+- [x] DONE — добавлены delta updates для приложения по измененным файлам
 - [x] DONE — подключены независимые обновления сервисов через service catalog
 
 ## Сейчас выполняется
 
 - [ ] DOING — реализовать первый VPN service со статической конфигурацией
 - [ ] REVIEW — проверить публикацию service package через GitHub Releases
-- [ ] REVIEW — опубликовать первый `app-v*` release и проверить обновление между двумя опубликованными версиями
+- [ ] REVIEW — опубликовать следующий `app-v*` release и проверить delta update между двумя опубликованными версиями
 
 ## Следующий лучший шаг
 
@@ -48,4 +50,4 @@
 | MVP 4 | REVIEW | GitHub service catalog |
 | MVP 5 | DOING | VPN service без подписок |
 | MVP 6 | TODO | VPN subscription URL |
-| MVP 7 | REVIEW | обновления приложения, Agent и сервисов реализованы; требуется проверка публичного release |
+| MVP 7 | REVIEW | installer, signing hooks, full/delta app updates и service updates реализованы; требуется проверка публичного app release |

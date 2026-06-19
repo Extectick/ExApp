@@ -50,7 +50,7 @@ internal sealed class ApplicationUpdateService
                 "updates",
                 release.Version);
             Directory.CreateDirectory(updateRoot);
-            var archivePath = await _client.DownloadAsync(release, updateRoot, progress, cancellationToken);
+            var archivePath = await _client.DownloadAsync(release, CurrentVersion, updateRoot, progress, cancellationToken);
             await UpdateHistoryStore.AddAsync(new UpdateHistoryEntry(
                 DateTimeOffset.Now,
                 "ExApp",

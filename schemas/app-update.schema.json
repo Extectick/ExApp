@@ -19,6 +19,19 @@
         "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
         "size": { "type": "integer", "minimum": 1 }
       }
+    },
+    "delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseVersion", "url", "sha256", "size", "changedFiles", "deletedFiles"],
+      "properties": {
+        "baseVersion": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "size": { "type": "integer", "minimum": 1 },
+        "changedFiles": { "type": "integer", "minimum": 0 },
+        "deletedFiles": { "type": "integer", "minimum": 0 }
+      }
     }
   }
 }

@@ -2,6 +2,7 @@ bin/
 obj/
 .vs/
 .vscode/
+.tools/
 *.user
 *.suo
 TestResults/

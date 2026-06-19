@@ -1,10 +1,14 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Windows.System;
 using ExApp.Desktop.Services;
 using ExApp.Ipc;
 
@@ -32,6 +36,7 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
     private string _serviceFilter = "all";
     private string _rawLogs = string.Empty;
     private bool _logsPaused;
+    private bool _useCompactServiceCardActions;
 
     internal ObservableCollection<InstalledServiceCard> Services { get; } = [];
 
@@ -61,7 +66,8 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
         var selectedHasUpdate = selected is not null && HasUpdate(selected);
 
         TitleText.Text = localization.Translate("services.title");
-        BackButtonText.Text = localization.Translate("services.mock.back");
+        ToolTipService.SetToolTip(BackButton, localization.Translate("services.mock.back"));
+        AutomationProperties.SetName(BackButton, localization.Translate("services.mock.back"));
         ServiceSearchBox.PlaceholderText = localization.Translate("services.search.placeholder");
         SetFilterItems(
             ServiceFilterBox,
@@ -93,20 +99,8 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
 
         DetailsServiceNameText.Text = selected.Name;
         DetailsServiceMessageText.Text = status.Message;
-        StatusLabelText.Text = localization.Translate("services.mock.statusLabel");
-        HealthLabelText.Text = localization.Translate("services.mock.health");
-        VersionLabelText.Text = localization.Translate("services.mock.version");
-        DetailsStateText.Text = TranslateState(status.State);
-        DetailsHealthText.Text = status.Health;
-        DetailsVersionText.Text = selected.Version;
-        PreviousVersionLabelText.Text = localization.Translate("services.details.previousVersion");
-        ProcessIdLabelText.Text = localization.Translate("services.details.processId");
-        UptimeLabelText.Text = localization.Translate("services.details.uptime");
-        ExecutableLabelText.Text = localization.Translate("services.details.executable");
-        DetailsPreviousVersionText.Text = selected.Runtime?.PreviousVersion ?? localization.Translate("common.notAvailable");
-        DetailsProcessIdText.Text = selected.Runtime?.ProcessId?.ToString() ?? localization.Translate("common.notAvailable");
-        DetailsUptimeText.Text = FormatUptime(selected.Runtime?.UptimeSeconds);
-        DetailsExecutableText.Text = selected.Runtime?.ExecutablePath ?? localization.Translate("common.notAvailable");
+        DetailsMetaText.Text = BuildDetailsMetaText(selected, status, localization);
+        ApplyDetailsServiceIcon(selected.ServiceId);
         DetailsToggleButtonText.Text = localization.Translate(
             isSelectedBusy ? GetOperationTextKey(selectedOperation) : shouldStop ? "services.mock.stop" : "services.mock.start");
         DetailsToggleIcon.Symbol = shouldStop ? Symbol.Stop : Symbol.Play;
@@ -188,8 +182,41 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
     {
         if (InstalledServicesGrid.ItemsPanelRoot is ItemsWrapGrid panel && e.NewSize.Width > 0)
         {
-            panel.ItemWidth = Math.Min(456, Math.Max(240, e.NewSize.Width));
+            var itemWidth = CalculateServiceCardWidth(e.NewSize.Width, Services.Count);
+            panel.ItemWidth = itemWidth;
+            SetCompactServiceCardActions(itemWidth < 360);
         }
+    }
+
+    private void SetCompactServiceCardActions(bool useCompactActions)
+    {
+        if (_useCompactServiceCardActions == useCompactActions)
+        {
+            return;
+        }
+
+        _useCompactServiceCardActions = useCompactActions;
+        foreach (var service in Services)
+        {
+            service.UseCompactAction = useCompactActions;
+        }
+    }
+
+    private static double CalculateServiceCardWidth(double availableWidth, int itemCount)
+    {
+        const double minCardWidth = 320;
+        const double preferredCardWidth = 420;
+
+        if (availableWidth <= minCardWidth)
+        {
+            return Math.Max(0, availableWidth);
+        }
+
+        var maxColumnsByContent = Math.Max(1, itemCount);
+        var columns = Math.Min(maxColumnsByContent, Math.Max(1, (int)Math.Floor(availableWidth / preferredCardWidth)));
+        var itemWidth = Math.Floor(availableWidth / columns);
+
+        return Math.Min(preferredCardWidth, Math.Max(minCardWidth, itemWidth));
     }
 
     private async void InstalledServicesGrid_ItemClick(object sender, ItemClickEventArgs e)
@@ -458,12 +485,40 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
     private async void RefreshButton_Click(object sender, RoutedEventArgs e) =>
         await RefreshAsync(includeLogs: _selectedServiceId is not null);
 
-    private void BackButton_Click(object sender, RoutedEventArgs e)
+    private void BackButton_Click(object sender, RoutedEventArgs e) => CloseDetailsView();
+
+    private void ServicesPage_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (_selectedServiceId is null || e.Handled)
+        {
+            return;
+        }
+
+        if (e.Key == VirtualKey.Escape ||
+            e.Key == VirtualKey.Back && !IsTextInputFocused())
+        {
+            CloseDetailsView();
+            e.Handled = true;
+        }
+    }
+
+    private void CloseDetailsView()
+    {
+        if (_selectedServiceId is null)
+        {
+            return;
+        }
+
         _selectedServiceId = null;
         s_lastSelectedServiceId = null;
         ApplyLocalization();
         UpdateTimer();
+    }
+
+    private bool IsTextInputFocused()
+    {
+        var focusedElement = FocusManager.GetFocusedElement(XamlRoot);
+        return focusedElement is TextBox or AutoSuggestBox or PasswordBox;
     }
 
     private async void ClearLogsButton_Click(object sender, RoutedEventArgs e)
@@ -624,7 +679,7 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
     }
 
     private void FollowLogsButton_Click(object sender, RoutedEventArgs e) =>
-        LogsTextBox.Select(LogsTextBox.Text.Length, 0);
+        LogsTextBox.Select(0, 0);
 
     private async void ExportLogsButton_Click(object sender, RoutedEventArgs e)
     {
@@ -635,20 +690,32 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
 
         try
         {
-            var downloads = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "Downloads");
-            Directory.CreateDirectory(downloads);
-            var path = Path.Combine(
-                downloads,
+            var owner = Application.Current is App { MainWindow: { } mainWindow }
+                ? mainWindow.WindowHandle
+                : 0;
+            var path = NativeSaveFileDialog.Show(
+                owner,
+                LocalizationService.Current.Translate("services.logs.export"),
+                AppSettings.LastLogExportDirectory,
                 $"ExApp-{_selectedServiceId}-logs-{DateTime.Now:yyyyMMdd-HHmmss}.log");
-            await File.WriteAllTextAsync(path, _rawLogs);
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            await File.WriteAllTextAsync(path, FormatLogLines(_rawLogs, string.Empty));
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                AppSettings.LastLogExportDirectory = directory;
+            }
+
             ShowServiceOperation(
                 InfoBarSeverity.Success,
                 LocalizationService.Current.Translate("services.logs.exported"),
                 path);
         }
-        catch (IOException exception)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             ShowServiceOperation(
                 InfoBarSeverity.Error,
@@ -660,19 +727,73 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
     private void ApplyLogFilter(bool scrollToEnd)
     {
         var query = LogsSearchBox?.Text.Trim() ?? string.Empty;
-        var filtered = string.IsNullOrWhiteSpace(query)
-            ? _rawLogs
-            : string.Join(
-                Environment.NewLine,
-                _rawLogs.Split(Environment.NewLine)
-                    .Where(line => line.Contains(query, StringComparison.CurrentCultureIgnoreCase)));
+        var filtered = FormatLogLines(_rawLogs, query);
         LogsTextBox.Text = string.IsNullOrWhiteSpace(filtered)
             ? LocalizationService.Current.Translate("services.mock.logs.empty")
             : filtered;
         if (scrollToEnd)
         {
-            LogsTextBox.Select(LogsTextBox.Text.Length, 0);
+            LogsTextBox.Select(0, 0);
         }
+    }
+
+    private string FormatLogLines(string logs, string query)
+    {
+        if (string.IsNullOrWhiteSpace(logs))
+        {
+            return string.Empty;
+        }
+
+        var lines = logs.Split(
+                ["\r\n", "\n"],
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Reverse()
+            .Select(FormatLogLine);
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            lines = lines.Where(line => line.Contains(query, StringComparison.CurrentCultureIgnoreCase));
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string FormatLogLine(string line)
+    {
+        var separatorIndex = line.IndexOf(' ');
+        if (separatorIndex <= 0)
+        {
+            return line;
+        }
+
+        var timestamp = line[..separatorIndex];
+        if (!DateTimeOffset.TryParse(
+                timestamp,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeLocal,
+                out var parsed))
+        {
+            return line;
+        }
+
+        var message = line[(separatorIndex + 1)..].TrimStart();
+        return $"{parsed.ToLocalTime():dd.MM.yyyy HH:mm:ss}  {message}";
+    }
+
+    private void ApplyDetailsServiceIcon(string serviceId)
+    {
+        var serviceIcon = _catalogItems.TryGetValue(serviceId, out var catalogItem)
+            ? ServiceIconResolver.Resolve(serviceId, catalogItem.Icon)
+            : ServiceIconResolver.Resolve(serviceId, null);
+
+        DetailsServiceIconHost.Visibility =
+            serviceIcon.ImageSource is null && string.IsNullOrEmpty(serviceIcon.Glyph)
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+        DetailsServiceIconImage.Source = serviceIcon.ImageSource;
+        DetailsServiceIconImage.Visibility = serviceIcon.ImageSource is null ? Visibility.Collapsed : Visibility.Visible;
+        DetailsServiceIconGlyph.Glyph = serviceIcon.Glyph ?? string.Empty;
+        DetailsServiceIconGlyph.Visibility = string.IsNullOrEmpty(serviceIcon.Glyph) ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void RebuildCards()
@@ -713,7 +834,8 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
                     UninstallText = localization.Translate("services.mock.uninstall"),
                     ActionIcon = shouldStop ? Symbol.Stop : Symbol.Play,
                     IsBusy = isBusy,
-                    IsActionEnabled = _agentAvailable && !isBusy
+                    IsActionEnabled = _agentAvailable && !isBusy,
+                    UseCompactAction = _useCompactServiceCardActions
                 };
             })
             .ToList();
@@ -881,6 +1003,30 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
         }
     }
 
+    private string BuildDetailsMetaText(
+        AgentServiceInfo service,
+        AgentServiceStatus status,
+        LocalizationService localization)
+    {
+        var values = new List<string>
+        {
+            TranslateState(status.State),
+            $"{localization.Translate("services.mock.version")} {service.Version}"
+        };
+
+        if (service.Runtime?.ProcessId is { } processId)
+        {
+            values.Add($"PID {processId}");
+        }
+
+        if (service.Runtime?.UptimeSeconds is { } uptimeSeconds)
+        {
+            values.Add(FormatUptime(uptimeSeconds));
+        }
+
+        return string.Join("  /  ", values);
+    }
+
     private string TranslateState(string state)
     {
         var key = state.ToLowerInvariant() switch
@@ -928,6 +1074,145 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
             ? $"{(int)uptime.TotalDays}d {uptime:hh\\:mm\\:ss}"
             : uptime.ToString(@"hh\:mm\:ss");
     }
+
+    private static class NativeSaveFileDialog
+    {
+        private const int CancelledHResult = unchecked((int)0x800704C7);
+
+        public static string? Show(nint owner, string title, string initialDirectory, string fileName)
+        {
+            var dialog = (IFileSaveDialog)(object)new FileSaveDialog();
+            var options = FileOpenOptions.OverwritePrompt |
+                FileOpenOptions.PathMustExist |
+                FileOpenOptions.ForceFileSystem;
+            dialog.SetOptions(options);
+            dialog.SetTitle(title);
+            dialog.SetFileName(fileName);
+            dialog.SetDefaultExtension("log");
+            dialog.SetFileTypes(
+                3,
+                [
+                    new DialogFilterSpec("Log files (*.log)", "*.log"),
+                    new DialogFilterSpec("Text files (*.txt)", "*.txt"),
+                    new DialogFilterSpec("All files (*.*)", "*.*")
+                ]);
+
+            if (Directory.Exists(initialDirectory) &&
+                TryCreateShellItem(initialDirectory, out var folder))
+            {
+                dialog.SetDefaultFolder(folder);
+                dialog.SetFolder(folder);
+            }
+
+            var result = dialog.Show(owner);
+            if (result == CancelledHResult)
+            {
+                return null;
+            }
+
+            Marshal.ThrowExceptionForHR(result);
+            dialog.GetResult(out var item);
+            item.GetDisplayName(ShellItemDisplayName.FileSystemPath, out var pathPointer);
+            try
+            {
+                return Marshal.PtrToStringUni(pathPointer);
+            }
+            finally
+            {
+                Marshal.FreeCoTaskMem(pathPointer);
+            }
+        }
+
+        private static bool TryCreateShellItem(string path, out IShellItem shellItem)
+        {
+            var shellItemId = typeof(IShellItem).GUID;
+            var result = SHCreateItemFromParsingName(path, nint.Zero, ref shellItemId, out shellItem);
+            return result >= 0;
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+        private static extern int SHCreateItemFromParsingName(
+            string path,
+            nint bindContext,
+            ref Guid riid,
+            out IShellItem shellItem);
+
+        [ComImport]
+        [Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")]
+        private sealed class FileSaveDialog;
+
+        [ComImport]
+        [Guid("84BCCD23-5FDE-4CDB-AEA4-AF64B83D78AB")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IFileSaveDialog
+        {
+            [PreserveSig]
+            int Show(nint parent);
+            void SetFileTypes(uint fileTypesCount, [MarshalAs(UnmanagedType.LPArray)] DialogFilterSpec[] fileTypes);
+            void SetFileTypeIndex(uint fileType);
+            void GetFileTypeIndex(out uint fileType);
+            void Advise(nint events, out uint cookie);
+            void Unadvise(uint cookie);
+            void SetOptions(FileOpenOptions options);
+            void GetOptions(out FileOpenOptions options);
+            void SetDefaultFolder(IShellItem folder);
+            void SetFolder(IShellItem folder);
+            void GetFolder(out IShellItem folder);
+            void GetCurrentSelection(out IShellItem item);
+            void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string name);
+            void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+            void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string title);
+            void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string text);
+            void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string label);
+            void GetResult(out IShellItem item);
+            void AddPlace(IShellItem item, int placement);
+            void SetDefaultExtension([MarshalAs(UnmanagedType.LPWStr)] string extension);
+            void Close(int result);
+            void SetClientGuid(ref Guid guid);
+            void ClearClientData();
+            void SetFilter(nint filter);
+            void SetSaveAsItem(IShellItem item);
+            void SetProperties(nint store);
+            void SetCollectedProperties(nint list, bool appendDefault);
+            void GetProperties(out nint store);
+            void ApplyProperties(IShellItem item, nint store, nint owner, nint sink);
+        }
+
+        [ComImport]
+        [Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IShellItem
+        {
+            void BindToHandler(nint bindContext, ref Guid handlerId, ref Guid interfaceId, out nint ppv);
+            void GetParent(out IShellItem parent);
+            void GetDisplayName(ShellItemDisplayName displayName, out nint name);
+            void GetAttributes(uint mask, out uint attributes);
+            void Compare(IShellItem item, uint hint, out int order);
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private readonly struct DialogFilterSpec(string name, string spec)
+        {
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public readonly string Name = name;
+
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public readonly string Spec = spec;
+        }
+
+        [Flags]
+        private enum FileOpenOptions : uint
+        {
+            OverwritePrompt = 0x00000002,
+            PathMustExist = 0x00000800,
+            ForceFileSystem = 0x00000040
+        }
+
+        private enum ShellItemDisplayName : uint
+        {
+            FileSystemPath = 0x80058000
+        }
+    }
 }
 
 internal sealed class InstalledServiceCard : INotifyPropertyChanged
@@ -946,6 +1231,7 @@ internal sealed class InstalledServiceCard : INotifyPropertyChanged
     private bool _isBusy;
     private bool _isActionEnabled;
     private bool _hasUpdate;
+    private bool _useCompactAction;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -1036,8 +1322,25 @@ internal sealed class InstalledServiceCard : INotifyPropertyChanged
         init => _hasUpdate = value;
     }
 
+    public bool UseCompactAction
+    {
+        get => _useCompactAction;
+        set
+        {
+            if (SetField(ref _useCompactAction, value))
+            {
+                OnPropertyChanged(nameof(ActionButtonWidth));
+                OnPropertyChanged(nameof(ActionButtonPadding));
+                OnPropertyChanged(nameof(ActionTextVisibility));
+            }
+        }
+    }
+
     public Visibility ProgressVisibility => IsBusy ? Visibility.Visible : Visibility.Collapsed;
     public Visibility IconVisibility => IsBusy ? Visibility.Collapsed : Visibility.Visible;
+    public double ActionButtonWidth => UseCompactAction ? 42 : 148;
+    public Thickness ActionButtonPadding => UseCompactAction ? new Thickness(0) : new Thickness(10, 5, 10, 5);
+    public Visibility ActionTextVisibility => UseCompactAction ? Visibility.Collapsed : Visibility.Visible;
     public Visibility UpdateVisibility => HasUpdate ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ServiceIconVisibility => ServiceIcon.ImageSource is null && string.IsNullOrEmpty(ServiceIcon.Glyph)
         ? Visibility.Collapsed
@@ -1075,6 +1378,13 @@ internal sealed class InstalledServiceCard : INotifyPropertyChanged
         if (SetField(ref _hasUpdate, next.HasUpdate, nameof(HasUpdate)))
         {
             OnPropertyChanged(nameof(UpdateVisibility));
+        }
+
+        if (SetField(ref _useCompactAction, next.UseCompactAction, nameof(UseCompactAction)))
+        {
+            OnPropertyChanged(nameof(ActionButtonWidth));
+            OnPropertyChanged(nameof(ActionButtonPadding));
+            OnPropertyChanged(nameof(ActionTextVisibility));
         }
     }
 

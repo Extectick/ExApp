@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    KeyDown="ServicesPage_KeyDown"
     mc:Ignorable="d">
 
     <Grid x:Name="RootGrid" Padding="28" RowSpacing="20">
@@ -15,12 +16,24 @@
                         <AdaptiveTrigger MinWindowWidth="760" />
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
-                        <Setter Target="DetailsActions.(Grid.Row)" Value="0" />
-                        <Setter Target="DetailsActions.(Grid.Column)" Value="1" />
+                        <Setter Target="PageHeader.Margin" Value="0" />
                         <Setter Target="DetailsActions.HorizontalAlignment" Value="Right" />
                         <Setter Target="DetailsActions.Margin" Value="0" />
+                        <Setter Target="LogsActions.(Grid.Row)" Value="0" />
+                        <Setter Target="LogsActions.(Grid.Column)" Value="1" />
+                        <Setter Target="LogsActions.HorizontalAlignment" Value="Right" />
+                        <Setter Target="LogsActions.Margin" Value="0" />
+                        <Setter Target="LogsSearchBox.Width" Value="200" />
+                        <Setter Target="DetailsHeaderText.(Grid.Row)" Value="0" />
+                        <Setter Target="DetailsHeaderText.(Grid.Column)" Value="1" />
+                        <Setter Target="DetailsActions.(Grid.Row)" Value="0" />
+                        <Setter Target="DetailsActions.(Grid.Column)" Value="2" />
+                        <Setter Target="DetailsActions.(Grid.ColumnSpan)" Value="1" />
                         <Setter Target="ServiceFilterBox.(Grid.Row)" Value="0" />
                         <Setter Target="ServiceFilterBox.(Grid.Column)" Value="1" />
+                        <Setter Target="ServiceFilterBox.(Grid.ColumnSpan)" Value="1" />
+                        <Setter Target="ServiceFilterBox.HorizontalAlignment" Value="Stretch" />
+                        <Setter Target="ServiceFilterBox.MinWidth" Value="176" />
                         <Setter Target="ServiceSearchBox.(Grid.ColumnSpan)" Value="1" />
                     </VisualState.Setters>
                 </VisualState>
@@ -31,12 +44,24 @@
                     <VisualState.Setters>
                         <Setter Target="RootGrid.Padding" Value="16" />
                         <Setter Target="RootGrid.RowSpacing" Value="14" />
+                        <Setter Target="PageHeader.Margin" Value="0,44,0,0" />
                         <Setter Target="DetailsActions.(Grid.Row)" Value="1" />
-                        <Setter Target="DetailsActions.(Grid.Column)" Value="0" />
+                        <Setter Target="DetailsActions.(Grid.Column)" Value="1" />
+                        <Setter Target="DetailsActions.(Grid.ColumnSpan)" Value="2" />
                         <Setter Target="DetailsActions.HorizontalAlignment" Value="Left" />
                         <Setter Target="DetailsActions.Margin" Value="0,12,0,0" />
+                        <Setter Target="LogsActions.(Grid.Row)" Value="1" />
+                        <Setter Target="LogsActions.(Grid.Column)" Value="0" />
+                        <Setter Target="LogsActions.HorizontalAlignment" Value="Left" />
+                        <Setter Target="LogsActions.Margin" Value="0,8,0,0" />
+                        <Setter Target="LogsSearchBox.Width" Value="180" />
+                        <Setter Target="DetailsHeaderText.(Grid.Row)" Value="0" />
+                        <Setter Target="DetailsHeaderText.(Grid.Column)" Value="1" />
                         <Setter Target="ServiceFilterBox.(Grid.Row)" Value="1" />
                         <Setter Target="ServiceFilterBox.(Grid.Column)" Value="0" />
+                        <Setter Target="ServiceFilterBox.(Grid.ColumnSpan)" Value="2" />
+                        <Setter Target="ServiceFilterBox.HorizontalAlignment" Value="Stretch" />
+                        <Setter Target="ServiceFilterBox.MinWidth" Value="0" />
                         <Setter Target="ServiceSearchBox.(Grid.ColumnSpan)" Value="2" />
                     </VisualState.Setters>
                 </VisualState>
@@ -48,18 +73,29 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid ColumnSpacing="16">
+        <Grid x:Name="PageHeader" ColumnSpacing="10">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="TitleText" Style="{ThemeResource TitleTextBlockStyle}" Text="My services" />
-            <Button x:Name="BackButton" Grid.Column="1" Click="BackButton_Click" Visibility="Collapsed">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <SymbolIcon Symbol="Back" />
-                    <TextBlock x:Name="BackButtonText" Text="Back" />
-                </StackPanel>
+            <Button
+                x:Name="BackButton"
+                Width="40"
+                Height="40"
+                Padding="0"
+                VerticalAlignment="Center"
+                Click="BackButton_Click"
+                Visibility="Collapsed">
+                <SymbolIcon Symbol="Back" />
             </Button>
+            <TextBlock
+                x:Name="TitleText"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Style="{ThemeResource TitleTextBlockStyle}"
+                Text="My services"
+                TextTrimming="CharacterEllipsis" />
         </Grid>
 
         <InfoBar
@@ -99,6 +135,7 @@
                 <ComboBox
                     x:Name="ServiceFilterBox"
                     Grid.Column="1"
+                    HorizontalAlignment="Stretch"
                     MinWidth="176"
                     SelectionChanged="ServiceFilterBox_SelectionChanged" />
             </Grid>
@@ -116,21 +153,21 @@
                 ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <GridView.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <ItemsWrapGrid ItemWidth="456" Orientation="Horizontal" />
+                        <ItemsWrapGrid ItemWidth="420" Orientation="Horizontal" />
                     </ItemsPanelTemplate>
                 </GridView.ItemsPanel>
                 <GridView.ItemContainerStyle>
                     <Style TargetType="GridViewItem">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                         <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                        <Setter Property="Margin" Value="0,0,14,14" />
+                        <Setter Property="Margin" Value="0,0,0,12" />
                         <Setter Property="Padding" Value="0" />
                     </Style>
                 </GridView.ItemContainerStyle>
                 <GridView.ItemTemplate>
                     <DataTemplate>
                         <Border
-                            MinHeight="200"
+                            MinHeight="172"
                             Padding="20"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -180,7 +217,12 @@
                                 </Grid>
                                 <Grid
                                     Grid.Row="1"
-                                    ColumnSpacing="12">
+                                    ColumnSpacing="12"
+                                    RowSpacing="12">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
@@ -213,17 +255,20 @@
                                         </Button>
                                     </Grid>
                                     <StackPanel
+                                        x:Name="CardActions"
                                         Grid.Column="1"
                                         HorizontalAlignment="Right"
                                         Orientation="Horizontal"
                                         Spacing="8">
                                     <Button
-                                        Width="148"
+                                        Width="{Binding ActionButtonWidth}"
                                         Height="34"
-                                        Padding="10,5"
+                                        Padding="{Binding ActionButtonPadding}"
+                                        AutomationProperties.Name="{Binding ActionText}"
                                         Click="ListToggleButton_Click"
                                         IsEnabled="{Binding IsActionEnabled}"
-                                        Tag="{Binding ServiceId}">
+                                        Tag="{Binding ServiceId}"
+                                        ToolTipService.ToolTip="{Binding ActionText}">
                                         <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
                                             <Grid Width="22" Height="18">
                                                 <ProgressRing
@@ -235,7 +280,7 @@
                                                     Symbol="{Binding ActionIcon}"
                                                     Visibility="{Binding IconVisibility}" />
                                             </Grid>
-                                            <TextBlock Text="{Binding ActionText}" />
+                                            <TextBlock Text="{Binding ActionText}" Visibility="{Binding ActionTextVisibility}" />
                                         </StackPanel>
                                     </Button>
                                     <Button
@@ -281,14 +326,21 @@
             </StackPanel>
         </Grid>
 
-        <Grid x:Name="DetailsViewRoot" Grid.Row="1" RowSpacing="16" Visibility="Collapsed">
+        <Grid
+            x:Name="DetailsViewRoot"
+            Grid.Row="1"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            RowSpacing="12"
+            Visibility="Collapsed">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Grid ColumnSpacing="18">
+            <Grid ColumnSpacing="14" RowSpacing="8">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
@@ -297,65 +349,44 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <StackPanel Spacing="12">
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Spacing="2">
-                            <TextBlock x:Name="DetailsServiceNameText" FontSize="24" FontWeight="SemiBold" Text="Mock Service" />
-                            <TextBlock x:Name="DetailsServiceMessageText" Opacity="0.72" TextWrapping="Wrap" />
-                        </StackPanel>
+                <Border
+                    x:Name="DetailsServiceIconHost"
+                    Width="44"
+                    Height="44"
+                    VerticalAlignment="Top"
+                    Background="{ThemeResource SystemFillColorNeutralBackgroundBrush}"
+                    CornerRadius="8"
+                    Visibility="Collapsed">
+                    <Grid>
+                        <FontIcon
+                            x:Name="DetailsServiceIconGlyph"
+                            FontFamily="Segoe MDL2 Assets"
+                            FontSize="22"
+                            Visibility="Collapsed" />
+                        <Image
+                            x:Name="DetailsServiceIconImage"
+                            Width="30"
+                            Height="30"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Stretch="Uniform"
+                            Visibility="Collapsed" />
                     </Grid>
+                </Border>
 
-                    <Grid ColumnSpacing="24" RowSpacing="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <StackPanel Spacing="2">
-                            <TextBlock x:Name="StatusLabelText" Opacity="0.72" Text="Status" />
-                            <TextBlock x:Name="DetailsStateText" FontWeight="SemiBold" Text="stopped" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Spacing="2">
-                            <TextBlock x:Name="HealthLabelText" Opacity="0.72" Text="Health" />
-                            <TextBlock x:Name="DetailsHealthText" FontWeight="SemiBold" Text="stopped" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="2" Spacing="2">
-                            <TextBlock x:Name="VersionLabelText" Opacity="0.72" Text="Version" />
-                            <TextBlock x:Name="DetailsVersionText" FontWeight="SemiBold" Text="0.1.0" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="3" Spacing="2">
-                            <TextBlock x:Name="PreviousVersionLabelText" Opacity="0.72" />
-                            <TextBlock x:Name="DetailsPreviousVersionText" FontWeight="SemiBold" />
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Spacing="2">
-                            <TextBlock x:Name="ProcessIdLabelText" Opacity="0.72" />
-                            <TextBlock x:Name="DetailsProcessIdText" FontWeight="SemiBold" />
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="2">
-                            <TextBlock x:Name="UptimeLabelText" Opacity="0.72" />
-                            <TextBlock x:Name="DetailsUptimeText" FontWeight="SemiBold" />
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Spacing="2">
-                            <TextBlock x:Name="ExecutableLabelText" Opacity="0.72" />
-                            <TextBlock
-                                x:Name="DetailsExecutableText"
-                                MaxWidth="480"
-                                FontWeight="SemiBold"
-                                TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-                    </Grid>
+                <StackPanel x:Name="DetailsHeaderText" Grid.Column="1" HorizontalAlignment="Left" Spacing="4">
+                    <TextBlock x:Name="DetailsServiceNameText" FontSize="24" FontWeight="SemiBold" Text="Mock Service" />
+                    <TextBlock x:Name="DetailsServiceMessageText" Opacity="0.72" TextWrapping="WrapWholeWords" />
+                    <TextBlock
+                        x:Name="DetailsMetaText"
+                        Margin="0,4,0,0"
+                        Opacity="0.72"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
                 </StackPanel>
 
-                <StackPanel x:Name="DetailsActions" Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
-                    <Button x:Name="DetailsToggleButton" Click="ToggleServiceButton_Click" MinWidth="148">
+                <StackPanel x:Name="DetailsActions" Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                    <Button x:Name="DetailsToggleButton" Click="ToggleServiceButton_Click" Height="34" MinWidth="148">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <Grid Width="22" Height="18">
                                 <ProgressRing x:Name="DetailsStartingRing" Width="16" Height="16" IsActive="False" Visibility="Collapsed" />
@@ -364,10 +395,10 @@
                             <TextBlock x:Name="DetailsToggleButtonText" Text="Start" />
                         </StackPanel>
                     </Button>
-                    <Button x:Name="RefreshButton" Click="RefreshButton_Click">
+                    <Button x:Name="RefreshButton" Width="42" Height="34" Padding="0" Click="RefreshButton_Click">
                         <SymbolIcon Symbol="Refresh" />
                     </Button>
-                    <Button x:Name="ServiceMenuButton">
+                    <Button x:Name="ServiceMenuButton" Width="42" Height="34" Padding="0">
                         <SymbolIcon Symbol="More" />
                         <Button.Flyout>
                             <MenuFlyout>
@@ -392,59 +423,79 @@
                 </StackPanel>
             </Grid>
 
-            <Border Grid.Row="1" Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
-                <Grid RowSpacing="10">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <StackPanel Spacing="2">
-                        <TextBlock x:Name="LogsTitleText" FontSize="18" FontWeight="SemiBold" Text="Latest logs" />
-                        <TextBlock x:Name="UpdatedText" Opacity="0.72" />
-                    </StackPanel>
-                    <VariableSizedWrapGrid
-                        Grid.Row="1"
-                        Margin="0,8,0,0"
-                        HorizontalAlignment="Right"
-                        ItemHeight="34"
-                        Orientation="Horizontal">
-                        <TextBox
-                            x:Name="LogsSearchBox"
-                            Width="220"
-                            Margin="0,0,8,0"
-                            TextChanged="LogsSearchBox_TextChanged" />
-                        <ToggleButton
-                            x:Name="PauseLogsButton"
-                            Margin="0,0,8,0"
-                            Checked="PauseLogsButton_Changed"
-                            Unchecked="PauseLogsButton_Changed" />
-                        <Button
-                            x:Name="FollowLogsButton"
-                            Margin="0,0,8,0"
-                            Click="FollowLogsButton_Click">
-                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE74B;" />
-                        </Button>
-                        <Button x:Name="ExportLogsButton" Margin="0,0,8,0" Click="ExportLogsButton_Click">
-                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE74E;" />
-                        </Button>
-                        <Button x:Name="RefreshLogsButton" Margin="0,0,8,0" Click="RefreshButton_Click">
-                            <SymbolIcon Symbol="Refresh" />
-                        </Button>
-                        <Button x:Name="ClearLogsButton" Click="ClearLogsButton_Click">
-                            <SymbolIcon Symbol="Delete" />
-                        </Button>
-                    </VariableSizedWrapGrid>
+            <Grid
+                x:Name="LogsPanel"
+                Grid.Row="1"
+                VerticalAlignment="Stretch"
+                RowSpacing="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                    <Grid x:Name="LogsHeader" ColumnSpacing="10" RowSpacing="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="LogsTitleText" FontSize="16" FontWeight="SemiBold" Text="Latest logs" />
+                            <TextBlock x:Name="UpdatedText" FontSize="12" Opacity="0.64" />
+                        </StackPanel>
+                        <ScrollViewer
+                            x:Name="LogsActions"
+                            Grid.Column="1"
+                            HorizontalAlignment="Right"
+                            HorizontalScrollBarVisibility="Hidden"
+                            HorizontalScrollMode="Enabled"
+                            VerticalScrollBarVisibility="Disabled"
+                            VerticalScrollMode="Disabled">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBox
+                                    x:Name="LogsSearchBox"
+                                    Width="200"
+                                    Height="34"
+                                    TextChanged="LogsSearchBox_TextChanged" />
+                                <ToggleButton
+                                    x:Name="PauseLogsButton"
+                                    Height="34"
+                                    Checked="PauseLogsButton_Changed"
+                                    Unchecked="PauseLogsButton_Changed" />
+                                <Button
+                                    x:Name="FollowLogsButton"
+                                    Width="42"
+                                    Height="34"
+                                    Padding="0"
+                                    Click="FollowLogsButton_Click">
+                                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE74B;" />
+                                </Button>
+                                <Button x:Name="ExportLogsButton" Width="42" Height="34" Padding="0" Click="ExportLogsButton_Click">
+                                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE74E;" />
+                                </Button>
+                                <Button x:Name="RefreshLogsButton" Width="42" Height="34" Padding="0" Click="RefreshButton_Click">
+                                    <SymbolIcon Symbol="Refresh" />
+                                </Button>
+                                <Button x:Name="ClearLogsButton" Width="42" Height="34" Padding="0" Click="ClearLogsButton_Click">
+                                    <SymbolIcon Symbol="Delete" />
+                                </Button>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
                     <TextBox
                         x:Name="LogsTextBox"
-                        Grid.Row="2"
+                        Grid.Row="1"
                         AcceptsReturn="True"
                         FontFamily="Consolas"
                         IsReadOnly="True"
-                        MinHeight="140"
+                        MinHeight="0"
+                        Padding="12"
+                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                        ScrollViewer.VerticalScrollBarVisibility="Auto"
                         TextWrapping="NoWrap" />
-                </Grid>
-            </Border>
+            </Grid>
         </Grid>
     </Grid>
 </Page>

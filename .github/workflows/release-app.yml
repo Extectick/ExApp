@@ -56,16 +56,82 @@ jobs:
 
       - name: Package ExApp, Agent and Updater
         shell: pwsh
-        run: ./tools/package-exapp.ps1 -Version '${{ steps.release.outputs.assembly_version }}'
+        env:
+          SIGNING_CERTIFICATE_BASE64: ${{ secrets.SIGNING_CERTIFICATE_BASE64 }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          REQUIRE_CODE_SIGNING: ${{ vars.REQUIRE_CODE_SIGNING }}
+        run: |
+          $requireSigning = $env:REQUIRE_CODE_SIGNING -eq 'true'
+          ./tools/package-exapp.ps1 `
+            -Version '${{ steps.release.outputs.assembly_version }}' `
+            -CertificateBase64 $env:SIGNING_CERTIFICATE_BASE64 `
+            -CertificatePassword $env:SIGNING_CERTIFICATE_PASSWORD `
+            -RequireSignature:$requireSigning
+
+      - name: Download previous app package
+        id: previous_app
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $headers = @{
+            "User-Agent" = "ExApp-Release"
+            "Accept" = "application/vnd.github+json"
+            "Authorization" = "Bearer $env:GITHUB_TOKEN"
+          }
+          $releases = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/${{ github.repository }}/releases?per_page=50"
+          $wantPrerelease = '${{ steps.release.outputs.channel }}' -eq 'beta'
+          $previous = $releases |
+            Where-Object {
+              -not $_.draft -and
+              $_.prerelease -eq $wantPrerelease -and
+              $_.tag_name -like 'app-v*' -and
+              $_.tag_name -ne '${{ steps.release.outputs.tag }}'
+            } |
+            Select-Object -First 1
+          if (-not $previous) {
+            "found=false" >> $env:GITHUB_OUTPUT
+            return
+          }
+
+          $asset = $previous.assets |
+            Where-Object { $_.name -like 'exapp-*-win-x64.zip' -and $_.name -notlike 'exapp-delta-*' } |
+            Select-Object -First 1
+          if (-not $asset) {
+            "found=false" >> $env:GITHUB_OUTPUT
+            return
+          }
+
+          $target = "artifacts/app/previous-$($asset.name)"
+          Invoke-WebRequest -Headers @{ "User-Agent" = "ExApp-Release" } -Uri $asset.browser_download_url -OutFile $target
+          $baseVersion = $previous.tag_name -replace '^app-v', ''
+          "found=true" >> $env:GITHUB_OUTPUT
+          "package=$target" >> $env:GITHUB_OUTPUT
+          "version=$baseVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Package delta update
+        if: steps.previous_app.outputs.found == 'true'
+        shell: pwsh
+        run: |
+          ./tools/package-exapp-delta.ps1 `
+            -BasePackagePath '${{ steps.previous_app.outputs.package }}' `
+            -BaseVersion '${{ steps.previous_app.outputs.version }}' `
+            -Version '${{ steps.release.outputs.assembly_version }}'
 
       - name: Generate update manifest
         shell: pwsh
         run: |
-          ./tools/generate-app-update-manifest.ps1 `
-            -Version '${{ steps.release.outputs.assembly_version }}' `
-            -ReleaseTag '${{ steps.release.outputs.tag }}' `
-            -Repository '${{ github.repository }}' `
-            -Channel '${{ steps.release.outputs.channel }}'
+          $deltaPackage = Get-ChildItem artifacts/app -Filter 'exapp-delta-*-to-${{ steps.release.outputs.assembly_version }}-win-x64.zip' -ErrorAction SilentlyContinue | Select-Object -First 1
+          $arguments = @(
+            "-Version", "${{ steps.release.outputs.assembly_version }}",
+            "-ReleaseTag", "${{ steps.release.outputs.tag }}",
+            "-Repository", "${{ github.repository }}",
+            "-Channel", "${{ steps.release.outputs.channel }}"
+          )
+          if ($deltaPackage) {
+            $arguments += @("-DeltaPackagePath", $deltaPackage.FullName, "-DeltaBaseVersion", "${{ steps.previous_app.outputs.version }}")
+          }
+          ./tools/generate-app-update-manifest.ps1 @arguments
 
       - name: Validate release assets
         shell: pwsh
@@ -76,6 +142,39 @@ jobs:
           if ($hash -ne $manifest.package.sha256 -or (Get-Item $package).Length -ne $manifest.package.size) {
             throw "Application package does not match its update manifest."
           }
+          if ($manifest.delta) {
+            $deltaPackage = "artifacts/app/$(Split-Path ([uri]$manifest.delta.url).AbsolutePath -Leaf)"
+            $deltaHash = (Get-FileHash -Algorithm SHA256 $deltaPackage).Hash.ToLowerInvariant()
+            if ($deltaHash -ne $manifest.delta.sha256 -or (Get-Item $deltaPackage).Length -ne $manifest.delta.size) {
+              throw "Delta package does not match its update manifest."
+            }
+          }
+
+      - name: Build MSI installer
+        shell: pwsh
+        run: |
+          ./tools/build-exapp-installer.ps1 -Version '${{ steps.release.outputs.assembly_version }}'
+
+      - name: Sign MSI installer
+        shell: pwsh
+        env:
+          SIGNING_CERTIFICATE_BASE64: ${{ secrets.SIGNING_CERTIFICATE_BASE64 }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          REQUIRE_CODE_SIGNING: ${{ vars.REQUIRE_CODE_SIGNING }}
+        run: |
+          $requireSigning = $env:REQUIRE_CODE_SIGNING -eq 'true'
+          ./tools/sign-windows-artifacts.ps1 `
+            -Path 'artifacts/app' `
+            -Include '*.msi' `
+            -CertificateBase64 $env:SIGNING_CERTIFICATE_BASE64 `
+            -CertificatePassword $env:SIGNING_CERTIFICATE_PASSWORD `
+            -RequireSignature:$requireSigning
+          $msi = Get-ChildItem artifacts/app -Filter 'exapp-*-win-x64.msi' | Select-Object -First 1
+          if (-not $msi) {
+            throw "MSI installer was not created."
+          }
+          (Get-FileHash -Algorithm SHA256 $msi.FullName).Hash.ToLowerInvariant() | Set-Content -Encoding ASCII "$($msi.FullName).sha256"
+          $msi.Length | Set-Content -Encoding ASCII "$($msi.FullName).size"
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
@@ -84,9 +183,15 @@ jobs:
           prerelease: ${{ steps.release.outputs.channel == 'beta' }}
           generate_release_notes: true
           files: |
-            artifacts/app/exapp-*-win-x64.zip
-            artifacts/app/exapp-*-win-x64.zip.sha256
-            artifacts/app/exapp-*-win-x64.zip.size
+            artifacts/app/exapp-[0-9]*-win-x64.zip
+            artifacts/app/exapp-[0-9]*-win-x64.zip.sha256
+            artifacts/app/exapp-[0-9]*-win-x64.zip.size
+            artifacts/app/exapp-delta-*-win-x64.zip
+            artifacts/app/exapp-delta-*-win-x64.zip.sha256
+            artifacts/app/exapp-delta-*-win-x64.zip.size
+            artifacts/app/exapp-*-win-x64.msi
+            artifacts/app/exapp-*-win-x64.msi.sha256
+            artifacts/app/exapp-*-win-x64.msi.size
             artifacts/app/exapp-update.json
             schemas/app-update.schema.json
         env:

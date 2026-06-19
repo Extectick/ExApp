@@ -35,6 +35,7 @@ public sealed partial class MainWindow : Window
     }
 
     public FrameworkElement RootElement => RootGrid;
+    public nint WindowHandle => _windowHandle;
 
     public void ApplyLocalization()
     {

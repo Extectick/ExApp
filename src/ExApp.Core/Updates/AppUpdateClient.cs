@@ -42,14 +42,16 @@ public sealed class AppUpdateClient : IDisposable
 
     public async Task<string> DownloadAsync(
         AppReleaseManifest manifest,
+        string currentVersion,
         string destinationDirectory,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(destinationDirectory);
-        var targetPath = Path.Combine(destinationDirectory, $"exapp-{manifest.Version}-win-x64.zip");
+        var package = SelectPackage(manifest, currentVersion);
+        var targetPath = Path.Combine(destinationDirectory, GetPackageFileName(package.Url, manifest.Version, package.BaseVersion));
         if (File.Exists(targetPath) &&
-            await ComputeSha256Async(targetPath, cancellationToken) == manifest.Package.Sha256)
+            await ComputeSha256Async(targetPath, cancellationToken) == package.Sha256)
         {
             progress?.Report(1);
             return targetPath;
@@ -58,19 +60,19 @@ public sealed class AppUpdateClient : IDisposable
         var temporaryPath = $"{targetPath}.{Guid.NewGuid():N}.download";
         try
         {
-            if (!IsHttp(manifest.Package.Url))
+            if (!IsHttp(package.Url))
             {
-                File.Copy(Path.GetFullPath(manifest.Package.Url), temporaryPath, overwrite: true);
+                File.Copy(Path.GetFullPath(package.Url), temporaryPath, overwrite: true);
                 progress?.Report(1);
             }
             else
             {
                 using var response = await _httpClient.GetAsync(
-                    manifest.Package.Url,
+                    package.Url,
                     HttpCompletionOption.ResponseHeadersRead,
                     cancellationToken);
                 response.EnsureSuccessStatusCode();
-                var total = response.Content.Headers.ContentLength ?? manifest.Package.Size;
+                var total = response.Content.Headers.ContentLength ?? package.Size;
                 await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
                 await using var output = new FileStream(
                     temporaryPath,
@@ -95,7 +97,7 @@ public sealed class AppUpdateClient : IDisposable
                 await output.FlushAsync(cancellationToken);
             }
             var hash = await ComputeSha256Async(temporaryPath, cancellationToken);
-            if (!hash.Equals(manifest.Package.Sha256, StringComparison.OrdinalIgnoreCase))
+            if (!hash.Equals(package.Sha256, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException("ExApp update SHA-256 does not match the release manifest.");
             }
@@ -170,10 +172,42 @@ public sealed class AppUpdateClient : IDisposable
             string.IsNullOrWhiteSpace(manifest.Package.Url) ||
             manifest.Package.Size <= 0 ||
             manifest.Package.Sha256.Length != 64 ||
-            !manifest.Package.Sha256.All(Uri.IsHexDigit))
+            !manifest.Package.Sha256.All(Uri.IsHexDigit) ||
+            (manifest.Delta is not null && !IsValidDelta(manifest.Delta)))
         {
             throw new InvalidOperationException("ExApp update manifest is invalid.");
         }
+    }
+
+    private static AppPackageDescriptor SelectPackage(AppReleaseManifest manifest, string currentVersion) =>
+        manifest.Delta is { } delta &&
+        NormalizeVersion(delta.BaseVersion).Equals(NormalizeVersion(currentVersion), StringComparison.OrdinalIgnoreCase)
+            ? new AppPackageDescriptor(delta.Url, delta.Sha256, delta.Size, delta.BaseVersion)
+            : new AppPackageDescriptor(manifest.Package.Url, manifest.Package.Sha256, manifest.Package.Size, BaseVersion: null);
+
+    private static bool IsValidDelta(AppDeltaPackage delta) =>
+        TryParseVersion(delta.BaseVersion, out _) &&
+        !string.IsNullOrWhiteSpace(delta.Url) &&
+        delta.Size > 0 &&
+        delta.Sha256.Length == 64 &&
+        delta.Sha256.All(Uri.IsHexDigit) &&
+        delta.ChangedFiles >= 0 &&
+        delta.DeletedFiles >= 0;
+
+    private static string GetPackageFileName(string source, string version, string? baseVersion)
+    {
+        if (Uri.TryCreate(source, UriKind.Absolute, out var uri) &&
+            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+            return Path.GetFileName(uri.AbsolutePath);
+        }
+
+        var fileName = Path.GetFileName(source);
+        return string.IsNullOrWhiteSpace(fileName)
+            ? baseVersion is null
+                ? $"exapp-{version}-win-x64.zip"
+                : $"exapp-delta-{baseVersion}-to-{version}-win-x64.zip"
+            : fileName;
     }
 
     private static async Task<string> ComputeSha256Async(
@@ -193,7 +227,15 @@ public sealed class AppUpdateClient : IDisposable
     private static bool TryParseVersion(string value, out Version version) =>
         Version.TryParse(value.Split('-', 2)[0], out version!);
 
+    private static string NormalizeVersion(string value) => value.Split('-', 2)[0];
+
     private static bool IsHttp(string value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
         (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
+    private sealed record AppPackageDescriptor(
+        string Url,
+        string Sha256,
+        long Size,
+        string? BaseVersion);
 }

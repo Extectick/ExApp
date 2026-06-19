@@ -20,6 +20,7 @@ public static class AppSettings
     private static readonly string LanguagePath = Path.Combine(SettingsDirectory, "language.txt");
     private static readonly string UpdateChannelPath = Path.Combine(SettingsDirectory, "update-channel.txt");
     private static readonly string AutomaticUpdateChecksPath = Path.Combine(SettingsDirectory, "automatic-update-checks.txt");
+    private static readonly string LastLogExportDirectoryPath = Path.Combine(SettingsDirectory, "last-log-export-directory.txt");
 
     public static AppThemePreference ThemePreference
     {
@@ -76,6 +77,29 @@ public static class AppSettings
         {
             Directory.CreateDirectory(SettingsDirectory);
             File.WriteAllText(AutomaticUpdateChecksPath, value.ToString());
+        }
+    }
+
+    public static string LastLogExportDirectory
+    {
+        get
+        {
+            var value = File.Exists(LastLogExportDirectoryPath)
+                ? File.ReadAllText(LastLogExportDirectoryPath).Trim()
+                : null;
+            return !string.IsNullOrWhiteSpace(value) && Directory.Exists(value)
+                ? value
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        }
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(SettingsDirectory);
+            File.WriteAllText(LastLogExportDirectoryPath, value);
         }
     }
 
