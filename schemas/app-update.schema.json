@@ -3,7 +3,7 @@
   "title": "ExApp update manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["manifestVersion", "version", "channel", "publishedAt", "package"],
+  "required": ["manifestVersion", "version", "channel", "publishedAt", "package", "signature"],
   "properties": {
     "manifestVersion": { "const": 1 },
     "version": { "type": "string", "minLength": 1 },
@@ -30,7 +30,36 @@
         "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
         "size": { "type": "integer", "minimum": 1 },
         "changedFiles": { "type": "integer", "minimum": 0 },
+        "patchedFiles": { "type": "integer", "minimum": 0 },
         "deletedFiles": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "deltas": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["baseVersion", "url", "sha256", "size", "changedFiles", "deletedFiles"],
+        "properties": {
+          "baseVersion": { "type": "string", "minLength": 1 },
+          "url": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+          "size": { "type": "integer", "minimum": 1 },
+          "changedFiles": { "type": "integer", "minimum": 0 },
+          "patchedFiles": { "type": "integer", "minimum": 0 },
+          "deletedFiles": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "keyId", "value"],
+      "properties": {
+        "algorithm": { "const": "ecdsa-p256-sha256" },
+        "keyId": { "type": "string", "minLength": 1 },
+        "value": { "type": "string", "minLength": 1 }
       }
     }
   }

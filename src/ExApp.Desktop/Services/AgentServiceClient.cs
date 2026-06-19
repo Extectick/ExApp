@@ -5,6 +5,7 @@ namespace ExApp.Desktop.Services;
 internal sealed class AgentServiceClient
 {
     private readonly NamedPipeIpcClient _client = new(AgentProcessManager.PipeName);
+    private readonly AgentProcessManager _processManager = new();
 
     public async Task<bool> PingAsync()
     {
@@ -32,38 +33,41 @@ internal sealed class AgentServiceClient
         SendStatusAsync(IpcCommands.ServiceStatus, serviceId);
 
     public async Task<IReadOnlyList<AgentServiceInfo>> ListAsync() =>
-        await _client.SendAsync<object, AgentServiceInfo[]>(IpcCommands.ServiceList, new { })
+        await SendAsync<object, AgentServiceInfo[]>(IpcCommands.ServiceList, new { })
         ?? [];
 
     public Task<AgentDiagnosticsSnapshot?> GetDiagnosticsAsync() =>
-        _client.SendAsync<object, AgentDiagnosticsSnapshot>(
+        SendAsync<object, AgentDiagnosticsSnapshot>(
             IpcCommands.AgentDiagnostics,
             new { },
             TimeSpan.FromSeconds(15));
 
     public async Task InstallAsync(string packagePath, string? expectedSha256 = null)
     {
-        await _client.SendAsync<ServiceInstallRequest, object>(
+        await SendAsync<ServiceInstallRequest, object>(
             IpcCommands.ServiceInstall,
             new ServiceInstallRequest(packagePath, expectedSha256));
     }
 
-    public Task<ServiceUpdateResult?> UpdateAsync(string packagePath, string? expectedSha256 = null) =>
-        _client.SendAsync<ServiceUpdateRequest, ServiceUpdateResult>(
+    public Task<ServiceUpdateResult?> UpdateAsync(
+        string packagePath,
+        string? expectedSha256 = null,
+        bool isDelta = false) =>
+        SendAsync<ServiceUpdateRequest, ServiceUpdateResult>(
             IpcCommands.ServiceUpdate,
-            new ServiceUpdateRequest(packagePath, expectedSha256),
+            new ServiceUpdateRequest(packagePath, expectedSha256, isDelta),
             TimeSpan.FromSeconds(30));
 
     public async Task UninstallAsync(string serviceId, bool deleteData)
     {
-        await _client.SendAsync<ServiceUninstallRequest, object>(
+        await SendAsync<ServiceUninstallRequest, object>(
             IpcCommands.ServiceUninstall,
             new ServiceUninstallRequest(serviceId, deleteData));
     }
 
     public async Task<string> GetLogsAsync(string serviceId)
     {
-        var result = await _client.SendAsync<ServiceCommandRequest, ServiceLogsResult>(
+        var result = await SendAsync<ServiceCommandRequest, ServiceLogsResult>(
             IpcCommands.ServiceLogs,
             new ServiceCommandRequest(serviceId));
         return result?.Logs ?? string.Empty;
@@ -71,13 +75,33 @@ internal sealed class AgentServiceClient
 
     public async Task ClearLogsAsync(string serviceId)
     {
-        await _client.SendAsync<ServiceCommandRequest, object>(
+        await SendAsync<ServiceCommandRequest, object>(
             IpcCommands.ServiceClearLogs,
             new ServiceCommandRequest(serviceId));
     }
 
+    public Task<ServiceExecuteResult?> ExecuteAsync(
+        string serviceId,
+        string command,
+        IReadOnlyList<string>? arguments = null,
+        TimeSpan? timeout = null) =>
+        SendAsync<ServiceExecuteRequest, ServiceExecuteResult>(
+            IpcCommands.ServiceExecute,
+            new ServiceExecuteRequest(serviceId, command, arguments),
+            timeout);
+
     private Task<AgentServiceStatus?> SendStatusAsync(string command, string serviceId) =>
-        _client.SendAsync<ServiceCommandRequest, AgentServiceStatus>(
+        SendAsync<ServiceCommandRequest, AgentServiceStatus>(
             command,
             new ServiceCommandRequest(serviceId));
+
+    private async Task<TResponse?> SendAsync<TRequest, TResponse>(
+        string command,
+        TRequest payload,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        await _processManager.EnsureRunningAsync(cancellationToken);
+        return await _client.SendAsync<TRequest, TResponse>(command, payload, timeout, cancellationToken);
+    }
 }

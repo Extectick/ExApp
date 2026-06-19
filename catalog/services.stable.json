@@ -33,7 +33,7 @@
     {
       "id": "vpn-client",
       "name": "VPN Client",
-      "description": "First real service planned after the platform catalog and service runtime foundations.",
+      "description": "VPN service powered by sing-box with isolated lifecycle, configuration and logs.",
       "version": "0.1.0",
       "publisher": {
         "id": "exapp",
@@ -43,7 +43,7 @@
       "platform": "windows",
       "architecture": "x64",
       "status": "planned",
-      "permissions": ["network", "background", "tun", "dns", "routes"]
+      "permissions": ["network", "background", "tun", "dns", "routes", "admin"]
     }
   ]
 }

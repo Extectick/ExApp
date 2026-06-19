@@ -16,6 +16,7 @@ public static class IpcCommands
     public const string ServiceStatus = "service.status";
     public const string ServiceLogs = "service.logs";
     public const string ServiceClearLogs = "service.clearLogs";
+    public const string ServiceExecute = "service.execute";
     public const string ServiceRollback = "service.rollback";
 }
 
@@ -41,8 +42,10 @@ public sealed record IpcError
 }
 
 public sealed record ServiceCommandRequest(string ServiceId);
+public sealed record ServiceExecuteRequest(string ServiceId, string Command, IReadOnlyList<string>? Arguments = null);
+public sealed record ServiceExecuteResult(string ServiceId, string Command, int ExitCode, string StandardOutput, string StandardError);
 public sealed record ServiceInstallRequest(string PackagePath, string? ExpectedSha256);
-public sealed record ServiceUpdateRequest(string PackagePath, string? ExpectedSha256);
+public sealed record ServiceUpdateRequest(string PackagePath, string? ExpectedSha256, bool IsDelta = false);
 public sealed record ServiceUninstallRequest(string ServiceId, bool DeleteData);
 public sealed record ServiceLogsResult(string ServiceId, string Logs);
 public sealed record ServiceUpdateResult(

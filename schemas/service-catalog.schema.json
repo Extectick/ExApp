@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": ["catalogVersion", "channel", "updatedAt", "signature", "services"],
   "properties": {
+    "$schema": { "type": "string" },
     "catalogVersion": { "const": 1 },
     "channel": { "enum": ["stable", "beta", "dev"] },
     "updatedAt": { "type": "string", "format": "date-time" },
@@ -14,7 +15,7 @@
       "additionalProperties": false,
       "required": ["algorithm", "keyId", "value"],
       "properties": {
-        "algorithm": { "const": "dev-placeholder" },
+        "algorithm": { "const": "ecdsa-p256-sha256" },
         "keyId": { "type": "string", "minLength": 1 },
         "value": { "type": "string", "minLength": 1 }
       }
@@ -77,6 +78,50 @@
                 "pattern": "^[a-fA-F0-9]{64}$"
               },
               "size": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "delta": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["baseVersion", "url", "sha256", "size", "changedFiles", "deletedFiles"],
+            "properties": {
+              "baseVersion": {
+                "type": "string",
+                "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$"
+              },
+              "url": { "type": "string", "minLength": 1 },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-fA-F0-9]{64}$"
+              },
+              "size": { "type": "integer", "minimum": 1 },
+              "changedFiles": { "type": "integer", "minimum": 0 },
+              "patchedFiles": { "type": "integer", "minimum": 0 },
+              "deletedFiles": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "deltas": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["baseVersion", "url", "sha256", "size", "changedFiles", "deletedFiles"],
+              "properties": {
+                "baseVersion": {
+                  "type": "string",
+                  "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$"
+                },
+                "url": { "type": "string", "minLength": 1 },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-fA-F0-9]{64}$"
+                },
+                "size": { "type": "integer", "minimum": 1 },
+                "changedFiles": { "type": "integer", "minimum": 0 },
+                "patchedFiles": { "type": "integer", "minimum": 0 },
+                "deletedFiles": { "type": "integer", "minimum": 0 }
+              }
             }
           }
         }

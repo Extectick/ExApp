@@ -9,8 +9,8 @@ param(
     [string]$Channel = "stable",
     [string]$ArtifactsDirectory = "artifacts/app",
     [string]$OutputPath = "artifacts/app/exapp-update.json",
-    [string]$DeltaPackagePath,
-    [string]$DeltaBaseVersion
+    [string[]]$DeltaPackagePath,
+    [string[]]$DeltaBaseVersion
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,27 +38,52 @@ $manifest = [ordered]@{
 }
 
 if ($DeltaPackagePath) {
-    $resolvedDeltaPackagePath = Resolve-Path $DeltaPackagePath
-    $deltaName = Split-Path $resolvedDeltaPackagePath -Leaf
-    $deltaHash = (Get-FileHash -Algorithm SHA256 $resolvedDeltaPackagePath).Hash.ToLowerInvariant()
-    $deltaSize = (Get-Item $resolvedDeltaPackagePath).Length
-    $deltaManifestPath = Join-Path (Split-Path $resolvedDeltaPackagePath -Parent) "delta-work\delta\app-delta.json"
-    $changedFiles = 0
-    $deletedFiles = 0
-    if (Test-Path $deltaManifestPath) {
-        $deltaManifest = Get-Content -Raw $deltaManifestPath | ConvertFrom-Json
-        $changedFiles = @($deltaManifest.files).Count
-        $deletedFiles = @($deltaManifest.delete).Count
+    if ($DeltaBaseVersion.Count -ne $DeltaPackagePath.Count) {
+        throw "DeltaPackagePath and DeltaBaseVersion must have the same number of entries."
     }
 
-    $manifest["delta"] = [ordered]@{
-        baseVersion = $DeltaBaseVersion
-        url = "https://github.com/$Repository/releases/download/$ReleaseTag/$deltaName"
-        sha256 = $deltaHash
-        size = $deltaSize
-        changedFiles = $changedFiles
-        deletedFiles = $deletedFiles
+    $deltas = @()
+    for ($index = 0; $index -lt $DeltaPackagePath.Count; $index++) {
+        $resolvedDeltaPackagePath = Resolve-Path $DeltaPackagePath[$index]
+        $deltaName = Split-Path $resolvedDeltaPackagePath -Leaf
+        $deltaHash = (Get-FileHash -Algorithm SHA256 $resolvedDeltaPackagePath).Hash.ToLowerInvariant()
+        $deltaSize = (Get-Item $resolvedDeltaPackagePath).Length
+        $deltaInspectRoot = Join-Path (Split-Path $resolvedDeltaPackagePath -Parent) "inspect-$($deltaName -replace '[^a-zA-Z0-9.-]', '-')"
+        $changedFiles = 0
+        $patchedFiles = 0
+        $deletedFiles = 0
+        try {
+            Remove-Item -Recurse -Force $deltaInspectRoot -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Force $deltaInspectRoot | Out-Null
+            Expand-Archive -Path $resolvedDeltaPackagePath -DestinationPath $deltaInspectRoot -Force
+            $deltaManifestPath = Join-Path $deltaInspectRoot "app-delta.json"
+            if (-not (Test-Path $deltaManifestPath)) {
+                throw "Delta manifest app-delta.json was not found in '$deltaName'."
+            }
+
+            $deltaManifest = Get-Content -Raw $deltaManifestPath | ConvertFrom-Json
+            $changedFiles = @($deltaManifest.files).Count
+            $patchedFiles = @($deltaManifest.patches).Count
+            $deletedFiles = @($deltaManifest.delete).Count
+        }
+        finally {
+            Remove-Item -Recurse -Force $deltaInspectRoot -ErrorAction SilentlyContinue
+        }
+
+        $deltas += [ordered]@{
+            baseVersion = $DeltaBaseVersion[$index]
+            url = "https://github.com/$Repository/releases/download/$ReleaseTag/$deltaName"
+            sha256 = $deltaHash
+            size = $deltaSize
+            changedFiles = $changedFiles
+            patchedFiles = $patchedFiles
+            deletedFiles = $deletedFiles
+        }
     }
+
+    $deltas = @($deltas | Sort-Object { $_.size })
+    $manifest["delta"] = $deltas[0]
+    $manifest["deltas"] = $deltas
 }
 
 $resolvedOutput = Join-Path $repoRoot $OutputPath
@@ -67,8 +92,10 @@ $manifest | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 $resolvedOutput
 $hash | Set-Content -Encoding ASCII "$packagePath.sha256"
 $size | Set-Content -Encoding ASCII "$packagePath.size"
 if ($DeltaPackagePath) {
-    $deltaPath = Resolve-Path $DeltaPackagePath
-    (Get-FileHash -Algorithm SHA256 $deltaPath).Hash.ToLowerInvariant() | Set-Content -Encoding ASCII "$deltaPath.sha256"
-    (Get-Item $deltaPath).Length | Set-Content -Encoding ASCII "$deltaPath.size"
+    foreach ($path in $DeltaPackagePath) {
+        $deltaPath = Resolve-Path $path
+        (Get-FileHash -Algorithm SHA256 $deltaPath).Hash.ToLowerInvariant() | Set-Content -Encoding ASCII "$deltaPath.sha256"
+        (Get-Item $deltaPath).Length | Set-Content -Encoding ASCII "$deltaPath.size"
+    }
 }
 Write-Output $resolvedOutput

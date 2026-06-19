@@ -30,6 +30,13 @@ internal sealed class ServiceProcessClient(RuntimeService runtime)
 
     public Task ClearLogsAsync(string serviceId) => runtime.ClearLogsAsync(serviceId);
 
+    public Task<ServiceCommandResult> ExecuteAsync(
+        string serviceId,
+        string command,
+        IReadOnlyList<string>? arguments = null,
+        CancellationToken cancellationToken = default) =>
+        runtime.ExecuteAsync(serviceId, command, arguments, cancellationToken);
+
     public Task PrepareForUninstallAsync(string serviceId, CancellationToken cancellationToken = default) =>
         runtime.PrepareForUninstallAsync(serviceId, cancellationToken);
 }

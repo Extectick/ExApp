@@ -49,9 +49,19 @@ jobs:
 
       - name: Build and test
         shell: pwsh
+        env:
+          APP_UPDATE_SIGNING_PUBLIC_KEY_PEM: ${{ vars.APP_UPDATE_SIGNING_PUBLIC_KEY_PEM }}
+          APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64: ${{ vars.APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64 }}
         run: |
+          $publicKeyPem = $env:APP_UPDATE_SIGNING_PUBLIC_KEY_PEM
+          if ([string]::IsNullOrWhiteSpace($publicKeyPem) -and -not [string]::IsNullOrWhiteSpace($env:APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64)) {
+            $publicKeyPem = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64))
+          }
+          if ([string]::IsNullOrWhiteSpace($publicKeyPem)) {
+            throw "APP_UPDATE_SIGNING_PUBLIC_KEY_PEM or APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64 repository variable is required."
+          }
           dotnet restore ExApp.sln
-          dotnet build ExApp.sln --configuration Release --no-restore
+          dotnet build ExApp.sln --configuration Release --no-restore /p:AppUpdateSigningPublicKeyPem="$publicKeyPem"
           dotnet test ExApp.sln --configuration Release --no-build
 
       - name: Package ExApp, Agent and Updater
@@ -60,15 +70,25 @@ jobs:
           SIGNING_CERTIFICATE_BASE64: ${{ secrets.SIGNING_CERTIFICATE_BASE64 }}
           SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
           REQUIRE_CODE_SIGNING: ${{ vars.REQUIRE_CODE_SIGNING }}
+          APP_UPDATE_SIGNING_PUBLIC_KEY_PEM: ${{ vars.APP_UPDATE_SIGNING_PUBLIC_KEY_PEM }}
+          APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64: ${{ vars.APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64 }}
         run: |
+          $publicKeyPem = $env:APP_UPDATE_SIGNING_PUBLIC_KEY_PEM
+          if ([string]::IsNullOrWhiteSpace($publicKeyPem) -and -not [string]::IsNullOrWhiteSpace($env:APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64)) {
+            $publicKeyPem = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64))
+          }
+          if ([string]::IsNullOrWhiteSpace($publicKeyPem)) {
+            throw "APP_UPDATE_SIGNING_PUBLIC_KEY_PEM or APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64 repository variable is required."
+          }
           $requireSigning = $env:REQUIRE_CODE_SIGNING -eq 'true'
           ./tools/package-exapp.ps1 `
             -Version '${{ steps.release.outputs.assembly_version }}' `
+            -AppUpdateSigningPublicKeyPem $publicKeyPem `
             -CertificateBase64 $env:SIGNING_CERTIFICATE_BASE64 `
             -CertificatePassword $env:SIGNING_CERTIFICATE_PASSWORD `
             -RequireSignature:$requireSigning
 
-      - name: Download previous app package
+      - name: Download previous app packages
         id: previous_app
         shell: pwsh
         env:
@@ -81,72 +101,125 @@ jobs:
           }
           $releases = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/${{ github.repository }}/releases?per_page=50"
           $wantPrerelease = '${{ steps.release.outputs.channel }}' -eq 'beta'
-          $previous = $releases |
+          $previousReleases = @($releases |
             Where-Object {
               -not $_.draft -and
               $_.prerelease -eq $wantPrerelease -and
               $_.tag_name -like 'app-v*' -and
               $_.tag_name -ne '${{ steps.release.outputs.tag }}'
             } |
-            Select-Object -First 1
-          if (-not $previous) {
+            Select-Object -First 3)
+          if ($previousReleases.Count -eq 0) {
             "found=false" >> $env:GITHUB_OUTPUT
             return
           }
 
-          $asset = $previous.assets |
-            Where-Object { $_.name -like 'exapp-*-win-x64.zip' -and $_.name -notlike 'exapp-delta-*' } |
-            Select-Object -First 1
-          if (-not $asset) {
+          $previousPackages = @()
+          foreach ($previous in $previousReleases) {
+            $asset = $previous.assets |
+              Where-Object { $_.name -like 'exapp-*-win-x64.zip' -and $_.name -notlike 'exapp-delta-*' } |
+              Select-Object -First 1
+            if (-not $asset) {
+              continue
+            }
+
+            $target = "artifacts/app/previous-$($asset.name)"
+            Invoke-WebRequest -Headers @{ "User-Agent" = "ExApp-Release" } -Uri $asset.browser_download_url -OutFile $target
+            $previousPackages += [pscustomobject]@{
+              package = $target
+              version = ($previous.tag_name -replace '^app-v', '')
+            }
+          }
+
+          if ($previousPackages.Count -eq 0) {
             "found=false" >> $env:GITHUB_OUTPUT
             return
           }
 
-          $target = "artifacts/app/previous-$($asset.name)"
-          Invoke-WebRequest -Headers @{ "User-Agent" = "ExApp-Release" } -Uri $asset.browser_download_url -OutFile $target
-          $baseVersion = $previous.tag_name -replace '^app-v', ''
+          $previousPackages | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 artifacts/app/previous-packages.json
           "found=true" >> $env:GITHUB_OUTPUT
-          "package=$target" >> $env:GITHUB_OUTPUT
-          "version=$baseVersion" >> $env:GITHUB_OUTPUT
 
       - name: Package delta update
         if: steps.previous_app.outputs.found == 'true'
         shell: pwsh
         run: |
-          ./tools/package-exapp-delta.ps1 `
-            -BasePackagePath '${{ steps.previous_app.outputs.package }}' `
-            -BaseVersion '${{ steps.previous_app.outputs.version }}' `
-            -Version '${{ steps.release.outputs.assembly_version }}'
+          $previousPackages = Get-Content -Raw artifacts/app/previous-packages.json | ConvertFrom-Json
+          foreach ($previous in @($previousPackages)) {
+            ./tools/package-exapp-delta.ps1 `
+              -BasePackagePath $previous.package `
+              -BaseVersion $previous.version `
+              -Version '${{ steps.release.outputs.assembly_version }}'
+          }
 
       - name: Generate update manifest
         shell: pwsh
+        env:
+          APP_UPDATE_SIGNING_PRIVATE_KEY_PEM: ${{ secrets.APP_UPDATE_SIGNING_PRIVATE_KEY_PEM }}
+          APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64: ${{ secrets.APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64 }}
+          APP_UPDATE_SIGNING_KEY_ID: ${{ vars.APP_UPDATE_SIGNING_KEY_ID }}
         run: |
-          $deltaPackage = Get-ChildItem artifacts/app -Filter 'exapp-delta-*-to-${{ steps.release.outputs.assembly_version }}-win-x64.zip' -ErrorAction SilentlyContinue | Select-Object -First 1
+          $deltaPackages = @(Get-ChildItem artifacts/app -Filter 'exapp-delta-*-to-${{ steps.release.outputs.assembly_version }}-win-x64.zip' -ErrorAction SilentlyContinue)
           $arguments = @{
             Version = "${{ steps.release.outputs.assembly_version }}"
             ReleaseTag = "${{ steps.release.outputs.tag }}"
             Repository = "${{ github.repository }}"
             Channel = "${{ steps.release.outputs.channel }}"
           }
-          if ($deltaPackage) {
-            $arguments.DeltaPackagePath = $deltaPackage.FullName
-            $arguments.DeltaBaseVersion = "${{ steps.previous_app.outputs.version }}"
+          if ($deltaPackages.Count -gt 0) {
+            $arguments.DeltaPackagePath = @($deltaPackages | ForEach-Object { $_.FullName })
+            $arguments.DeltaBaseVersion = @($deltaPackages | ForEach-Object {
+              if ($_.Name -notmatch '^exapp-delta-(.+)-to-${{ steps.release.outputs.assembly_version }}-win-x64\.zip$') {
+                throw "Unexpected delta package name '$($_.Name)'."
+              }
+              $matches[1]
+            })
           }
           ./tools/generate-app-update-manifest.ps1 @arguments
+          $keyId = if ($env:APP_UPDATE_SIGNING_KEY_ID) { $env:APP_UPDATE_SIGNING_KEY_ID } else { 'exapp-app-update-2026' }
+          $privateKeyPem = $env:APP_UPDATE_SIGNING_PRIVATE_KEY_PEM
+          if ([string]::IsNullOrWhiteSpace($privateKeyPem) -and -not [string]::IsNullOrWhiteSpace($env:APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64)) {
+            $privateKeyPem = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64))
+          }
+          ./tools/sign-app-update-manifest.ps1 `
+            -Path artifacts/app/exapp-update.json `
+            -PrivateKeyPem $privateKeyPem `
+            -KeyId $keyId `
+            -RequireSignature
 
       - name: Validate release assets
         shell: pwsh
+        env:
+          APP_UPDATE_SIGNING_PUBLIC_KEY_PEM: ${{ vars.APP_UPDATE_SIGNING_PUBLIC_KEY_PEM }}
+          APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64: ${{ vars.APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64 }}
         run: |
+          $publicKeyPem = $env:APP_UPDATE_SIGNING_PUBLIC_KEY_PEM
+          if ([string]::IsNullOrWhiteSpace($publicKeyPem) -and -not [string]::IsNullOrWhiteSpace($env:APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64)) {
+            $publicKeyPem = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64))
+          }
+          ./tools/verify-app-update-manifest.ps1 `
+            -Path artifacts/app/exapp-update.json `
+            -PublicKeyPem $publicKeyPem
+          if (-not (Test-Json -Path artifacts/app/exapp-update.json -SchemaFile schemas/app-update.schema.json)) {
+            throw "Application update manifest does not match schemas/app-update.schema.json."
+          }
+
           $manifest = Get-Content -Raw artifacts/app/exapp-update.json | ConvertFrom-Json
           $package = "artifacts/app/exapp-$($manifest.version)-win-x64.zip"
           $hash = (Get-FileHash -Algorithm SHA256 $package).Hash.ToLowerInvariant()
           if ($hash -ne $manifest.package.sha256 -or (Get-Item $package).Length -ne $manifest.package.size) {
             throw "Application package does not match its update manifest."
           }
-          if ($manifest.delta) {
-            $deltaPackage = "artifacts/app/$(Split-Path ([uri]$manifest.delta.url).AbsolutePath -Leaf)"
+          $manifestDeltas = @()
+          if ($manifest.deltas) {
+            $manifestDeltas = @($manifest.deltas)
+          } elseif ($manifest.delta) {
+            $manifestDeltas = @($manifest.delta)
+          }
+
+          foreach ($delta in $manifestDeltas) {
+            $deltaPackage = "artifacts/app/$(Split-Path ([uri]$delta.url).AbsolutePath -Leaf)"
             $deltaHash = (Get-FileHash -Algorithm SHA256 $deltaPackage).Hash.ToLowerInvariant()
-            if ($deltaHash -ne $manifest.delta.sha256 -or (Get-Item $deltaPackage).Length -ne $manifest.delta.size) {
+            if ($deltaHash -ne $delta.sha256 -or (Get-Item $deltaPackage).Length -ne $delta.size) {
               throw "Delta package does not match its update manifest."
             }
           }

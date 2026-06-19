@@ -3,13 +3,9 @@ param(
     [string]$BasePackagePath,
 
     [Parameter(Mandatory = $true)]
-    [string]$BaseVersion,
+    [string]$TargetPackagePath,
 
-    [Parameter(Mandatory = $true)]
-    [string]$Version,
-
-    [string]$PublishDirectory = "artifacts/app/publish/desktop",
-    [string]$OutputDirectory = "artifacts/app"
+    [string]$OutputDirectory = "artifacts"
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,36 +14,6 @@ $ErrorActionPreference = "Stop"
 function Normalize-PathToken {
     param([string]$Value)
     return $Value.Replace("\", "/")
-}
-
-function Read-FileManifest {
-    param([string]$Root, [string]$VersionValue)
-
-    $manifestPath = Join-Path $Root "app-files.json"
-    if (Test-Path $manifestPath) {
-        return Get-Content -Raw $manifestPath | ConvertFrom-Json
-    }
-
-    $files = Get-ChildItem -Path $Root -Recurse -File |
-        Where-Object {
-            $relative = Normalize-PathToken ([IO.Path]::GetRelativePath($Root, $_.FullName))
-            $relative -ne "app-files.json" -and $relative -ne "app-delta.json"
-        } |
-        Sort-Object FullName |
-        ForEach-Object {
-            [pscustomobject]@{
-                path = Normalize-PathToken ([IO.Path]::GetRelativePath($Root, $_.FullName))
-                sha256 = (Get-FileHash -Algorithm SHA256 -Path $_.FullName).Hash.ToLowerInvariant()
-                size = $_.Length
-            }
-        }
-
-    return [pscustomobject]@{
-        manifestVersion = 1
-        version = $VersionValue
-        generatedAt = (Get-Date).ToUniversalTime().ToString("o")
-        files = $files
-    }
 }
 
 function Resolve-RepoPath {
@@ -89,32 +55,34 @@ function Try-CreatePatch {
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $basePackage = Resolve-Path $BasePackagePath
-$publishRoot = Resolve-Path (Resolve-RepoPath $PublishDirectory)
+$targetPackage = Resolve-Path $TargetPackagePath
 $outputRoot = Resolve-RepoPath $OutputDirectory
-$workRoot = Join-Path $outputRoot "delta-work"
+$workRoot = Join-Path $outputRoot "service-delta-work"
 $baseRoot = Join-Path $workRoot "base"
+$targetRoot = Join-Path $workRoot "target"
 $deltaRoot = Join-Path $workRoot "delta"
-$deltaName = "exapp-delta-$BaseVersion-to-$Version-win-x64.zip"
-$deltaPath = Join-Path $outputRoot $deltaName
 
 Remove-Item -Recurse -Force $workRoot -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force $baseRoot, $deltaRoot, $outputRoot | Out-Null
+New-Item -ItemType Directory -Force $baseRoot, $targetRoot, $deltaRoot, $outputRoot | Out-Null
 Expand-Archive -Path $basePackage -DestinationPath $baseRoot -Force
+Expand-Archive -Path $targetPackage -DestinationPath $targetRoot -Force
 
-$baseManifest = Read-FileManifest -Root $baseRoot -VersionValue $BaseVersion
-$targetManifestPath = Join-Path $publishRoot "app-files.json"
-if (-not (Test-Path $targetManifestPath)) {
-    throw "Target app-files.json was not found. Run package-exapp.ps1 first."
+$baseManifest = Get-Content -Raw (Join-Path $baseRoot "service.manifest.json") | ConvertFrom-Json
+$targetManifest = Get-Content -Raw (Join-Path $targetRoot "service.manifest.json") | ConvertFrom-Json
+if ($baseManifest.id -ne $targetManifest.id) {
+    throw "Base and target packages belong to different services."
 }
-$targetManifest = Get-Content -Raw $targetManifestPath | ConvertFrom-Json
+
+$baseChecksums = Get-Content -Raw (Join-Path $baseRoot "checksums.json") | ConvertFrom-Json
+$targetChecksums = Get-Content -Raw (Join-Path $targetRoot "checksums.json") | ConvertFrom-Json
 
 $baseFiles = @{}
-foreach ($file in $baseManifest.files) {
+foreach ($file in $baseChecksums.files) {
     $baseFiles[(Normalize-PathToken $file.path)] = $file
 }
 
 $targetFiles = @{}
-foreach ($file in $targetManifest.files) {
+foreach ($file in $targetChecksums.files) {
     $targetFiles[(Normalize-PathToken $file.path)] = $file
 }
 
@@ -123,10 +91,8 @@ $patches = @()
 foreach ($path in ($targetFiles.Keys | Sort-Object)) {
     $targetFile = $targetFiles[$path]
     $baseFile = $baseFiles[$path]
-    if ($null -eq $baseFile -or
-        $baseFile.sha256 -ne $targetFile.sha256 -or
-        [int64]$baseFile.size -ne [int64]$targetFile.size) {
-        $source = Join-Path $publishRoot ($path.Replace("/", [IO.Path]::DirectorySeparatorChar))
+    if ($null -eq $baseFile -or $baseFile.sha256 -ne $targetFile.sha256) {
+        $source = Join-Path $targetRoot ($path.Replace("/", [IO.Path]::DirectorySeparatorChar))
         $baseSource = Join-Path $baseRoot ($path.Replace("/", [IO.Path]::DirectorySeparatorChar))
         $patch = if ($null -ne $baseFile) {
             Try-CreatePatch -RelativePath $path -BasePath $baseSource -TargetPath $source -TargetFile $targetFile -DeltaRoot $deltaRoot
@@ -153,28 +119,37 @@ foreach ($path in ($baseFiles.Keys | Sort-Object)) {
     }
 }
 
-Copy-Item $targetManifestPath (Join-Path $deltaRoot "app-files.json") -Force
+Copy-Item (Join-Path $targetRoot "service.manifest.json") (Join-Path $deltaRoot "service.manifest.json") -Force
+Copy-Item (Join-Path $targetRoot "checksums.json") (Join-Path $deltaRoot "checksums.json") -Force
+Copy-Item (Join-Path $targetRoot "signature.sig") (Join-Path $deltaRoot "signature.sig") -Force
+
 [ordered]@{
     manifestVersion = 1
-    baseVersion = $BaseVersion
-    version = $Version
+    serviceId = $targetManifest.id
+    baseVersion = $baseManifest.version
+    version = $targetManifest.version
     generatedAt = (Get-Date).ToUniversalTime().ToString("o")
     files = $changedFiles
     patches = $patches
     delete = $deletedFiles
-} | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 (Join-Path $deltaRoot "app-delta.json")
+} | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 (Join-Path $deltaRoot "service-delta.json")
 
+$platformToken = if ($targetManifest.platform -eq "windows") { "win" } else { $targetManifest.platform }
+$deltaName = "$($targetManifest.id)-delta-$($baseManifest.version)-to-$($targetManifest.version)-$platformToken-$($targetManifest.architecture).svcdelta"
+$deltaPath = Join-Path $outputRoot $deltaName
 Remove-Item -Force $deltaPath -ErrorAction SilentlyContinue
 Compress-Archive -Path (Join-Path $deltaRoot "*") -DestinationPath $deltaPath -CompressionLevel Optimal
 $hash = (Get-FileHash -Algorithm SHA256 -Path $deltaPath).Hash.ToLowerInvariant()
 $size = (Get-Item $deltaPath).Length
 $hash | Set-Content -Encoding ASCII "$deltaPath.sha256"
 $size | Set-Content -Encoding ASCII "$deltaPath.size"
+Remove-Item -Recurse -Force $workRoot -ErrorAction SilentlyContinue
 
 [pscustomobject]@{
     Path = $deltaPath
-    BaseVersion = $BaseVersion
-    Version = $Version
+    ServiceId = $targetManifest.id
+    BaseVersion = $baseManifest.version
+    Version = $targetManifest.version
     ChangedFiles = $changedFiles.Count
     PatchedFiles = $patches.Count
     DeletedFiles = $deletedFiles.Count

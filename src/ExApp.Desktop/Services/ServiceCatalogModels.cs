@@ -30,6 +30,8 @@ internal sealed record ServiceCatalogItem
     public string Status { get; init; } = string.Empty;
     public IReadOnlyList<string> Permissions { get; init; } = [];
     public ServiceCatalogPackage? Package { get; init; }
+    public ServiceCatalogDeltaPackage? Delta { get; init; }
+    public IReadOnlyList<ServiceCatalogDeltaPackage> Deltas { get; init; } = [];
 }
 
 internal sealed record ServiceCatalogPublisher
@@ -45,7 +47,18 @@ internal sealed record ServiceCatalogPackage
     public long Size { get; init; }
 }
 
-internal sealed record CatalogPackageResolution(string PackagePath, string Sha256);
+internal sealed record ServiceCatalogDeltaPackage
+{
+    public string BaseVersion { get; init; } = string.Empty;
+    public string Url { get; init; } = string.Empty;
+    public string Sha256 { get; init; } = string.Empty;
+    public long Size { get; init; }
+    public int ChangedFiles { get; init; }
+    public int PatchedFiles { get; init; }
+    public int DeletedFiles { get; init; }
+}
+
+internal sealed record CatalogPackageResolution(string PackagePath, string Sha256, bool IsDelta);
 
 internal enum ServiceCatalogSource
 {

@@ -43,6 +43,7 @@ internal sealed class AgentRequestHandler(
                     serviceId => services.StatusAsync(serviceId, cancellationToken)),
                 IpcCommands.ServiceLogs => await LogsAsync(request),
                 IpcCommands.ServiceClearLogs => await ClearLogsAsync(request),
+                IpcCommands.ServiceExecute => await ExecuteServiceCommandAsync(request, cancellationToken),
                 IpcCommands.ServiceRollback => await RollbackAsync(request, cancellationToken),
                 _ => Error(request, "ipc.unknownCommand", $"Unknown command '{request.Command}'.")
             };
@@ -121,10 +122,15 @@ internal sealed class AgentRequestHandler(
     private async Task<IpcResponse> UpdateAsync(IpcRequest request, CancellationToken cancellationToken)
     {
         var payload = RequirePayload<ServiceUpdateRequest>(request);
-        var manifest = await packageManager.InspectPackageManifestAsync(
-            payload.PackagePath,
-            payload.ExpectedSha256,
-            cancellationToken);
+        var manifest = payload.IsDelta
+            ? await packageManager.InspectDeltaPackageManifestAsync(
+                payload.PackagePath,
+                payload.ExpectedSha256,
+                cancellationToken)
+            : await packageManager.InspectPackageManifestAsync(
+                payload.PackagePath,
+                payload.ExpectedSha256,
+                cancellationToken);
 
         return await WithServiceOperationLockAsync(request, manifest.Id, async () =>
         {
@@ -147,10 +153,15 @@ internal sealed class AgentRequestHandler(
             ExApp.Packaging.Models.PackageInstallResult installResult;
             try
             {
-                installResult = await packageManager.InstallAsync(
-                    payload.PackagePath,
-                    payload.ExpectedSha256,
-                    cancellationToken);
+                installResult = payload.IsDelta
+                    ? await packageManager.InstallDeltaAsync(
+                        payload.PackagePath,
+                        payload.ExpectedSha256,
+                        cancellationToken)
+                    : await packageManager.InstallAsync(
+                        payload.PackagePath,
+                        payload.ExpectedSha256,
+                        cancellationToken);
             }
             catch (Exception updateException)
             {
@@ -355,6 +366,26 @@ internal sealed class AgentRequestHandler(
         var payload = RequirePayload<ServiceCommandRequest>(request);
         await services.ClearLogsAsync(payload.ServiceId);
         return Success(request, new { payload.ServiceId, cleared = true });
+    }
+
+    private async Task<IpcResponse> ExecuteServiceCommandAsync(IpcRequest request, CancellationToken cancellationToken)
+    {
+        var payload = RequirePayload<ServiceExecuteRequest>(request);
+        if (string.IsNullOrWhiteSpace(payload.Command))
+        {
+            throw new AgentCommandException("service.invalidCommand", "Service command is required.");
+        }
+
+        return await WithServiceOperationLockAsync(request, payload.ServiceId, async () =>
+        {
+            var result = await services.ExecuteAsync(payload.ServiceId, payload.Command, payload.Arguments, cancellationToken);
+            return Success(request, new ServiceExecuteResult(
+                payload.ServiceId,
+                payload.Command,
+                result.ExitCode,
+                result.StandardOutput,
+                result.StandardError));
+        }, cancellationToken);
     }
 
     private static T RequirePayload<T>(IpcRequest request) =>

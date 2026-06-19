@@ -62,10 +62,16 @@ internal sealed class AgentProcessManager
             return environmentPath;
         }
 
-        var bundled = Path.Combine(AppContext.BaseDirectory, "ExApp.Agent.exe");
-        if (File.Exists(bundled))
+        foreach (var bundled in new[]
+                 {
+                     Path.Combine(AppContext.BaseDirectory, "agent", "ExApp.Agent.exe"),
+                     Path.Combine(AppContext.BaseDirectory, "ExApp.Agent.exe")
+                 })
         {
-            return bundled;
+            if (File.Exists(bundled))
+            {
+                return bundled;
+            }
         }
 
         var current = new DirectoryInfo(AppContext.BaseDirectory);

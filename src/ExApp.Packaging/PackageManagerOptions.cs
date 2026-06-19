@@ -13,6 +13,7 @@ public sealed record PackageManagerOptions
     public int SupportedApiVersion { get; init; } = 1;
     public long MaximumExpandedPackageBytes { get; init; } = 256L * 1024 * 1024;
     public int MaximumPackageEntries { get; init; } = 4096;
+    public string? ServicePackageSigningPublicKeyPem { get; init; }
 
     private static string GetCurrentArchitecture() => RuntimeInformation.ProcessArchitecture switch
     {

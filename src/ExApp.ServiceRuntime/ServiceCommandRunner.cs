@@ -4,9 +4,16 @@ namespace ExApp.ServiceRuntime;
 
 public sealed class ServiceCommandRunner(ServiceRuntimeOptions options)
 {
+    public Task<ServiceCommandResult> ExecuteAsync(
+        ServiceDescriptor service,
+        string command,
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(service, command, null, cancellationToken);
+
     public async Task<ServiceCommandResult> ExecuteAsync(
         ServiceDescriptor service,
         string command,
+        IReadOnlyList<string>? arguments = null,
         CancellationToken cancellationToken = default)
     {
         var executable = service.ExecutablePath;
@@ -25,6 +32,11 @@ public sealed class ServiceCommandRunner(ServiceRuntimeOptions options)
             WorkingDirectory = Path.GetDirectoryName(executable)!
         };
         startInfo.ArgumentList.Add(command);
+        foreach (var argument in arguments ?? [])
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
         startInfo.ArgumentList.Add("--state");
         startInfo.ArgumentList.Add(service.RuntimeDirectory);
 
