@@ -3,6 +3,7 @@ param(
     [string]$BaseVersion = "0.1.900",
     [string]$TargetVersion = "0.1.901",
     [string]$OutputDirectory = "artifacts/app-update-e2e",
+    [switch]$CorruptInstalledDeltaBase,
     [switch]$KeepArtifacts
 )
 
@@ -48,12 +49,13 @@ $targetOutput = Join-Path $outputRoot "target"
 $deltaOutput = Join-Path $outputRoot "delta"
 $installedRoot = Join-Path $outputRoot "installed"
 $stagingRoot = Join-Path $outputRoot "staging"
+$fallbackStagingRoot = Join-Path $outputRoot "fallback-staging"
 $runnerRoot = Join-Path $outputRoot "runner"
 $updateRoot = Join-Path $outputRoot "update-state"
 
 try {
     Remove-Item -Recurse -Force $outputRoot -ErrorAction SilentlyContinue
-    New-Item -ItemType Directory -Force $baseOutput, $targetOutput, $deltaOutput, $installedRoot, $stagingRoot, $runnerRoot, $updateRoot | Out-Null
+    New-Item -ItemType Directory -Force $baseOutput, $targetOutput, $deltaOutput, $installedRoot, $stagingRoot, $fallbackStagingRoot, $runnerRoot, $updateRoot | Out-Null
 
     $basePackage = & (Join-Path $PSScriptRoot "package-exapp.ps1") `
         -Configuration $Configuration `
@@ -76,6 +78,28 @@ try {
 
     Expand-Archive -Path $basePackage -DestinationPath $installedRoot -Force
     Expand-Archive -Path $deltaInfo.Path -DestinationPath $stagingRoot -Force
+    if ($CorruptInstalledDeltaBase) {
+        Expand-Archive -Path $targetPackage -DestinationPath $fallbackStagingRoot -Force
+        $deltaManifest = Get-Content -Raw (Join-Path $stagingRoot "app-delta.json") | ConvertFrom-Json
+        $pathToCorrupt = $null
+        if ($deltaManifest.patches -and @($deltaManifest.patches).Count -gt 0) {
+            $pathToCorrupt = @($deltaManifest.patches)[0].path
+        }
+        elseif ($deltaManifest.files -and @($deltaManifest.files).Count -gt 0) {
+            $targetManifest = Get-Content -Raw (Join-Path $targetOutput "publish\desktop\app-files.json") | ConvertFrom-Json
+            $changedPaths = @($deltaManifest.files | ForEach-Object { $_.path })
+            $unchanged = @($targetManifest.files | Where-Object { $changedPaths -notcontains $_.path })
+            if ($unchanged.Count -gt 0) {
+                $pathToCorrupt = $unchanged[0].path
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($pathToCorrupt)) {
+            throw "Could not find an installed file to corrupt for fallback verification."
+        }
+
+        Add-Content -Path (Join-Path $installedRoot ($pathToCorrupt.Replace("/", [IO.Path]::DirectorySeparatorChar))) -Value "corrupt-delta-base"
+    }
 
     $installedUpdaterRoot = Join-Path $installedRoot "updater"
     $installedUpdaterPath = Join-Path $installedUpdaterRoot "ExApp.Updater.exe"
@@ -85,7 +109,7 @@ try {
 
     Copy-Item -Path (Join-Path $installedUpdaterRoot "*") -Destination $runnerRoot -Recurse -Force
     $updaterPath = Join-Path $runnerRoot "ExApp.Updater.exe"
-    $process = Start-Process -FilePath $updaterPath -WorkingDirectory (Split-Path $updaterPath -Parent) -Wait -PassThru -WindowStyle Hidden -ArgumentList @(
+    $updaterArguments = @(
         "--staging", $stagingRoot,
         "--target", $installedRoot,
         "--desktop-pid", "999999",
@@ -93,6 +117,11 @@ try {
         "--no-restart", "true",
         "--update-root", $updateRoot
     )
+    if ($CorruptInstalledDeltaBase) {
+        $updaterArguments += @("--fallback-staging", $fallbackStagingRoot)
+    }
+
+    $process = Start-Process -FilePath $updaterPath -WorkingDirectory (Split-Path $updaterPath -Parent) -Wait -PassThru -WindowStyle Hidden -ArgumentList $updaterArguments
     if ($process.ExitCode -ne 0) {
         throw "Updater exited with code $($process.ExitCode)."
     }
@@ -119,6 +148,19 @@ try {
         throw "Updater state is '$($state.status)' for version '$($state.version)', expected installed/$TargetVersion."
     }
 
+    $fallbackUsed = $false
+    $updaterLogPath = Join-Path $updateRoot "updater.log"
+    if ($CorruptInstalledDeltaBase) {
+        if (-not (Test-Path $updaterLogPath -PathType Leaf)) {
+            throw "Updater log was not written."
+        }
+
+        $fallbackUsed = (Get-Content -Raw $updaterLogPath).Contains("falling back to full package", [StringComparison]::OrdinalIgnoreCase)
+        if (-not $fallbackUsed) {
+            throw "Updater did not report delta-to-full fallback."
+        }
+    }
+
     [pscustomobject]@{
         BaseVersion = $BaseVersion
         TargetVersion = $TargetVersion
@@ -127,6 +169,7 @@ try {
         ChangedFiles = $deltaInfo.ChangedFiles
         PatchedFiles = $deltaInfo.PatchedFiles
         DeletedFiles = $deltaInfo.DeletedFiles
+        FallbackUsed = $fallbackUsed
         InstalledRoot = $installedRoot
     } | ConvertTo-Json -Depth 5 | Write-Output
 }

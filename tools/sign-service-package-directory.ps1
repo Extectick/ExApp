@@ -10,7 +10,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-Add-Type -Language CSharp -ReferencedAssemblies @("System.Security.Cryptography", "System.Text.Json") -TypeDefinition @'
+if (-not $PrivateKeyPem -and $PrivateKeyBase64) {
+    $PrivateKeyPem = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PrivateKeyBase64))
+}
+
+$resolvedPath = Resolve-Path $Path
+if ([string]::IsNullOrWhiteSpace($PrivateKeyPem)) {
+    if ($RequireSignature) {
+        throw "Service package signing key was not provided."
+    }
+
+    Set-Content -Encoding ASCII -Path (Join-Path $resolvedPath "signature.sig") -Value "dev-placeholder"
+    Write-Warning "No service package signing key was provided. Package will use a development placeholder signature."
+    return
+}
+
+Add-Type -Language CSharp -TypeDefinition @'
 using System;
 using System.IO;
 using System.Security.Cryptography;
@@ -43,21 +58,6 @@ public static class ExAppServicePackageSigner
     }
 }
 '@
-
-if (-not $PrivateKeyPem -and $PrivateKeyBase64) {
-    $PrivateKeyPem = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PrivateKeyBase64))
-}
-
-$resolvedPath = Resolve-Path $Path
-if ([string]::IsNullOrWhiteSpace($PrivateKeyPem)) {
-    if ($RequireSignature) {
-        throw "Service package signing key was not provided."
-    }
-
-    Set-Content -Encoding ASCII -Path (Join-Path $resolvedPath "signature.sig") -Value "dev-placeholder"
-    Write-Warning "No service package signing key was provided. Package will use a development placeholder signature."
-    return
-}
 
 [ExAppServicePackageSigner]::Sign($resolvedPath, $PrivateKeyPem, $KeyId)
 Write-Output (Join-Path $resolvedPath "signature.sig")

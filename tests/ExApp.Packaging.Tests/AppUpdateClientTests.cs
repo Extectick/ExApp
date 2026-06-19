@@ -198,6 +198,54 @@ public sealed class AppUpdateClientTests : IDisposable
     }
 
     [Fact]
+    public async Task DownloadPackageAsync_CanForceFullPackageWhenDeltaMatches()
+    {
+        Directory.CreateDirectory(_root);
+        var fullPackagePath = Path.Combine(_root, "exapp-0.3.1-win-x64.zip");
+        var deltaPackagePath = Path.Combine(_root, "exapp-delta-0.3.0-to-0.3.1-win-x64.zip");
+        await File.WriteAllTextAsync(fullPackagePath, "full-package-for-fallback");
+        await File.WriteAllTextAsync(deltaPackagePath, "delta-package-for-fallback");
+        var fullHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(fullPackagePath)))
+            .ToLowerInvariant();
+        var deltaHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(deltaPackagePath)))
+            .ToLowerInvariant();
+
+        using var client = new AppUpdateClient();
+        var manifest = new AppReleaseManifest
+        {
+            ManifestVersion = 1,
+            Version = "0.3.1",
+            Channel = "stable",
+            PublishedAt = DateTimeOffset.UtcNow,
+            Package = new AppReleasePackage
+            {
+                Url = fullPackagePath,
+                Sha256 = fullHash,
+                Size = new FileInfo(fullPackagePath).Length
+            },
+            Delta = new AppDeltaPackage
+            {
+                BaseVersion = "0.3.0",
+                Url = deltaPackagePath,
+                Sha256 = deltaHash,
+                Size = new FileInfo(deltaPackagePath).Length,
+                ChangedFiles = 1,
+                DeletedFiles = 0
+            }
+        };
+
+        var download = await client.DownloadPackageAsync(
+            manifest,
+            "0.3.0",
+            Path.Combine(_root, "downloads"),
+            preferDelta: false);
+
+        Assert.False(download.IsDelta);
+        Assert.EndsWith("exapp-0.3.1-win-x64.zip", download.PackagePath);
+        Assert.Equal(fullHash, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(download.PackagePath))).ToLowerInvariant());
+    }
+
+    [Fact]
     public async Task CheckAsync_AcceptsSignedManifest()
     {
         Directory.CreateDirectory(_root);
