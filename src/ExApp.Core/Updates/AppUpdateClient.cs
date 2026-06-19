@@ -47,14 +47,32 @@ public sealed class AppUpdateClient : IDisposable
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        var download = await DownloadPackageAsync(
+            manifest,
+            currentVersion,
+            destinationDirectory,
+            progress,
+            cancellationToken);
+        return download.PackagePath;
+    }
+
+    public async Task<AppPackageDownload> DownloadPackageAsync(
+        AppReleaseManifest manifest,
+        string currentVersion,
+        string destinationDirectory,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default,
+        bool preferDelta = true)
+    {
         Directory.CreateDirectory(destinationDirectory);
-        var package = SelectPackage(manifest, currentVersion);
+        var package = SelectPackage(manifest, currentVersion, preferDelta);
         var targetPath = Path.Combine(destinationDirectory, GetPackageFileName(package.Url, manifest.Version, package.BaseVersion));
+        var isDelta = package.BaseVersion is not null;
         if (File.Exists(targetPath) &&
             await ComputeSha256Async(targetPath, cancellationToken) == package.Sha256)
         {
             progress?.Report(1);
-            return targetPath;
+            return new AppPackageDownload(targetPath, isDelta);
         }
 
         var temporaryPath = $"{targetPath}.download";
@@ -72,7 +90,7 @@ public sealed class AppUpdateClient : IDisposable
             {
                 File.Move(temporaryPath, targetPath, overwrite: true);
                 progress?.Report(1);
-                return targetPath;
+                return new AppPackageDownload(targetPath, isDelta);
             }
 
             await DownloadHttpWithResumeAsync(package.Url, temporaryPath, package.Size, progress, cancellationToken);
@@ -87,7 +105,7 @@ public sealed class AppUpdateClient : IDisposable
 
         File.Move(temporaryPath, targetPath, overwrite: true);
         progress?.Report(1);
-        return targetPath;
+        return new AppPackageDownload(targetPath, isDelta);
     }
 
     public void Dispose() => _httpClient.Dispose();
@@ -158,8 +176,16 @@ public sealed class AppUpdateClient : IDisposable
         }
     }
 
-    private static AppPackageDescriptor SelectPackage(AppReleaseManifest manifest, string currentVersion)
+    private static AppPackageDescriptor SelectPackage(
+        AppReleaseManifest manifest,
+        string currentVersion,
+        bool preferDelta)
     {
+        if (!preferDelta)
+        {
+            return new AppPackageDescriptor(manifest.Package.Url, manifest.Package.Sha256, manifest.Package.Size, BaseVersion: null);
+        }
+
         var normalizedCurrent = NormalizeVersion(currentVersion);
         var delta = EnumerateDeltas(manifest)
             .Where(delta => NormalizeVersion(delta.BaseVersion).Equals(normalizedCurrent, StringComparison.OrdinalIgnoreCase))

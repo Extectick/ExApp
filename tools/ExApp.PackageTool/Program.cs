@@ -21,6 +21,7 @@ try
     return command switch
     {
         "install" => await InstallAsync(),
+        "update" => await UpdateAsync(),
         "list" => ListInstalled(),
         "state" => ShowState(),
         "rollback" => await RollbackAsync(),
@@ -49,6 +50,28 @@ async Task<int> InstallAsync()
         result.Manifest.Version,
         result.InstallDirectory,
         result.AlreadyInstalled,
+        result.State.PreviousVersion
+    });
+    return 0;
+}
+
+async Task<int> UpdateAsync()
+{
+    var packagePath = GetPositionalArgument(args, 1)
+        ?? throw new PackageException("command.packageRequired", "Package path is required.");
+    var result = args.Contains("--delta", StringComparer.OrdinalIgnoreCase)
+        ? await manager.InstallDeltaAsync(packagePath, GetOption(args, "--sha256"))
+        : await manager.InstallAsync(packagePath, GetOption(args, "--sha256"));
+    WriteJson(new
+    {
+        result.Manifest.Id,
+        result.Manifest.Version,
+        result.InstallDirectory,
+        result.AlreadyInstalled,
+        result.AppliedDelta,
+        result.CopiedFiles,
+        result.LinkedFiles,
+        result.DeletedFiles,
         result.State.PreviousVersion
     });
     return 0;
@@ -91,6 +114,7 @@ static int ShowUsage()
         """
         ExApp Package Tool
           install <package.svcpkg> [--sha256 <hash>] [--root <path>]
+          update <package.svcpkg|package.svcdelta> [--delta] [--sha256 <hash>] [--root <path>]
           list [--root <path>]
           state <service-id> [--root <path>]
           rollback <service-id> [--root <path>]
@@ -112,7 +136,7 @@ static string? GetPositionalArgument(string[] arguments, int position)
     {
         if (arguments[index].StartsWith("--", StringComparison.Ordinal))
         {
-            if (!arguments[index].Equals("--delete-data", StringComparison.OrdinalIgnoreCase))
+            if (!IsFlagOption(arguments[index]))
             {
                 index++;
             }
@@ -125,6 +149,10 @@ static string? GetPositionalArgument(string[] arguments, int position)
 
     return position < positional.Count ? positional[position] : null;
 }
+
+static bool IsFlagOption(string argument) =>
+    argument.Equals("--delete-data", StringComparison.OrdinalIgnoreCase) ||
+    argument.Equals("--delta", StringComparison.OrdinalIgnoreCase);
 
 void WriteJson<T>(T value) =>
     Console.WriteLine(JsonSerializer.Serialize(value, jsonOptions));

@@ -40,4 +40,10 @@ jobs:
 
       - name: App update e2e smoke
         shell: pwsh
-        run: ./tools/test-app-update-e2e.ps1 -Configuration Debug -BaseVersion 0.1.900 -TargetVersion 0.1.901
+        run: |
+          ./tools/test-app-update-e2e.ps1 -Configuration Debug -BaseVersion 0.1.900 -TargetVersion 0.1.901
+          ./tools/test-app-update-e2e.ps1 -Configuration Debug -BaseVersion 0.1.902 -TargetVersion 0.1.903 -CorruptInstalledDeltaBase
+
+      - name: Service update e2e smoke
+        shell: pwsh
+        run: ./tools/test-service-update-e2e.ps1 -Configuration Debug -BaseVersion 0.1.900 -TargetVersion 0.1.901

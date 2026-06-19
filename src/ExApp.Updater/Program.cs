@@ -22,6 +22,7 @@ if (Path.GetPathRoot(targetPath)?.Equals(targetPath, StringComparison.OrdinalIgn
 }
 
 string? stagingPath = null;
+string? fallbackStagingPath = null;
 if (!recoveryMode)
 {
     if (!arguments.TryGetValue("staging", out stagingPath))
@@ -34,6 +35,18 @@ if (!recoveryMode)
         stagingPath.Equals(targetPath, StringComparison.OrdinalIgnoreCase))
     {
         return 3;
+    }
+
+    if (arguments.TryGetValue("fallback-staging", out var fallbackStagingArgument) &&
+        !string.IsNullOrWhiteSpace(fallbackStagingArgument))
+    {
+        fallbackStagingPath = Path.GetFullPath(fallbackStagingArgument);
+        if (!Directory.Exists(fallbackStagingPath) ||
+            fallbackStagingPath.Equals(targetPath, StringComparison.OrdinalIgnoreCase) ||
+            fallbackStagingPath.Equals(stagingPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return 3;
+        }
     }
 }
 
@@ -87,6 +100,34 @@ try
         throw new InvalidOperationException("Updated ExApp executable is invalid.");
     }
 
+    try
+    {
+        plan = await BuildPlanAsync(targetPath, manifest, delta);
+    }
+    catch (Exception exception) when (delta is not null && fallbackStagingPath is not null && IsDeltaFallbackCandidate(exception))
+    {
+        await File.AppendAllTextAsync(
+            logPath,
+            $"{DateTimeOffset.Now:o} Delta update cannot be applied, falling back to full package: {exception.Message}{Environment.NewLine}");
+        stagingPath = fallbackStagingPath;
+        manifest = await LoadFileManifestAsync(stagingPath);
+        delta = await LoadDeltaManifestAsync(stagingPath);
+        if (delta is not null)
+        {
+            throw new InvalidOperationException("Application fallback staging must contain a full package, but app-delta.json was found.");
+        }
+
+        ValidateDeltaManifest(delta, manifest);
+        await ValidateStagingAsync(stagingPath, manifest, delta);
+        stagedDesktopPath = Path.Combine(stagingPath, "ExApp.Desktop.exe");
+        if (!File.Exists(stagedDesktopPath) || !IsPortableExecutable(stagedDesktopPath))
+        {
+            throw new InvalidOperationException("Fallback ExApp executable is invalid.");
+        }
+
+        plan = await BuildPlanAsync(targetPath, manifest, delta);
+    }
+
     await WaitForExitOrKillAsync(desktopPid, TimeSpan.FromSeconds(10));
     StopProcesses("ExApp.Agent");
 
@@ -96,7 +137,6 @@ try
     }
     Directory.CreateDirectory(backupPath);
 
-    plan = await BuildPlanAsync(targetPath, manifest, delta);
     await BackupPlanAsync(targetPath, backupPath, plan);
     await WritePlanAsync(backupPath, plan);
     await WriteStateAsync(statePath, new UpdateState(releaseVersion, targetPath, "applying", DateTimeOffset.UtcNow, null));
@@ -431,6 +471,9 @@ static async Task<UpdatePlan> BuildPlanAsync(string targetRoot, AppFileManifest 
 
     return new UpdatePlan(copy, patch, delete, unchanged);
 }
+
+static bool IsDeltaFallbackCandidate(Exception exception) =>
+    exception is InvalidOperationException or FileNotFoundException or IOException;
 
 static async Task BackupPlanAsync(string targetRoot, string backupRoot, UpdatePlan plan)
 {

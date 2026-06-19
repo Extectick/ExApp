@@ -102,9 +102,10 @@ internal sealed class ServiceCatalogClient
     public async Task<CatalogPackageResolution> ResolvePackageAsync(
         ServiceCatalogItem item,
         string? currentVersion = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool preferDelta = true)
     {
-        var delta = SelectDelta(item, currentVersion);
+        var delta = preferDelta ? SelectDelta(item, currentVersion) : null;
         var useDelta = delta is not null;
         var package = useDelta
             ? new PackageDescriptor(delta!.Url, delta.Sha256, delta.Size, ".svcdelta")

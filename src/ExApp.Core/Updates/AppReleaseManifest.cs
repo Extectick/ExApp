@@ -42,3 +42,7 @@ public sealed record AppUpdateCheckResult(
     string CurrentVersion,
     AppReleaseManifest? Release,
     bool IsUpdateAvailable);
+
+public sealed record AppPackageDownload(
+    string PackagePath,
+    bool IsDelta);

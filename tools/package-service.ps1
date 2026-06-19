@@ -4,6 +4,7 @@ param(
 
     [string]$Configuration = "Debug",
     [string]$OutputDirectory = "artifacts",
+    [string]$VersionOverride,
     [string]$ServicePackageSigningPrivateKeyPem,
     [string]$ServicePackageSigningPrivateKeyBase64,
     [string]$ServicePackageSigningKeyId = "exapp-service-package-2026",
@@ -34,6 +35,9 @@ if (-not (Test-Path $manifestPath -PathType Leaf)) {
 }
 
 $manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
+if (-not [string]::IsNullOrWhiteSpace($VersionOverride)) {
+    $manifest.version = $VersionOverride
+}
 $publishRoot = Join-Path $serviceRoot "bin\$Configuration\net8.0"
 $platformToken = if ($manifest.platform -eq "windows") { "win" } else { $manifest.platform }
 $packageId = "$($manifest.id)-$($manifest.version)-$platformToken-$($manifest.architecture)"
@@ -48,7 +52,7 @@ Remove-Item -Recurse -Force -Path $stagingRoot -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path (Join-Path $stagingRoot "bin") | Out-Null
 New-Item -ItemType Directory -Force -Path $packageOutputDirectory | Out-Null
 
-Copy-Item -Path $manifestPath -Destination (Join-Path $stagingRoot "service.manifest.json") -Force
+$manifest | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 -Path (Join-Path $stagingRoot "service.manifest.json")
 if ($manifest.icon -and -not $manifest.icon.StartsWith("glyph:", [StringComparison]::OrdinalIgnoreCase)) {
     $iconSource = Join-Path $serviceRoot $manifest.icon
     if (-not (Test-Path $iconSource -PathType Leaf)) {

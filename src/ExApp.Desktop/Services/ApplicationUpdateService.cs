@@ -102,24 +102,44 @@ internal sealed class ApplicationUpdateService
         {
             var updateRoot = Path.Combine(GetUpdateRoot(), release.Version);
             Directory.CreateDirectory(updateRoot);
-            var archivePath = await _client.DownloadAsync(release, CurrentVersion, updateRoot, progress, cancellationToken);
+            var download = await _client.DownloadPackageAsync(release, CurrentVersion, updateRoot, progress, cancellationToken);
             await UpdateHistoryStore.AddAsync(new UpdateHistoryEntry(
                 DateTimeOffset.Now,
                 "ExApp",
                 release.Version,
-                "installing",
-                null));
+                download.IsDelta ? "installing-delta" : "installing",
+                download.IsDelta ? "Delta package downloaded. Full package fallback will be prepared." : null));
             var stagingPath = Path.Combine(updateRoot, "staging");
             if (Directory.Exists(stagingPath))
             {
                 Directory.Delete(stagingPath, recursive: true);
             }
-            ZipFile.ExtractToDirectory(archivePath, stagingPath);
+
+            ZipFile.ExtractToDirectory(download.PackagePath, stagingPath);
+
+            string? fallbackStagingPath = null;
+            if (download.IsDelta)
+            {
+                var fallbackDownload = await _client.DownloadPackageAsync(
+                    release,
+                    CurrentVersion,
+                    Path.Combine(updateRoot, "fallback"),
+                    progress: null,
+                    cancellationToken,
+                    preferDelta: false);
+                fallbackStagingPath = Path.Combine(updateRoot, "fallback-staging");
+                if (Directory.Exists(fallbackStagingPath))
+                {
+                    Directory.Delete(fallbackStagingPath, recursive: true);
+                }
+
+                ZipFile.ExtractToDirectory(fallbackDownload.PackagePath, fallbackStagingPath);
+            }
 
             var runnerPath = PrepareUpdaterRunner(Path.Combine(updateRoot, "runner"));
 
             var updaterPath = Path.Combine(runnerPath, "ExApp.Updater.exe");
-            _ = Process.Start(new ProcessStartInfo(updaterPath)
+            var startInfo = new ProcessStartInfo(updaterPath)
             {
                 UseShellExecute = true,
                 WorkingDirectory = runnerPath,
@@ -130,7 +150,14 @@ internal sealed class ApplicationUpdateService
                     "--desktop-pid", Environment.ProcessId.ToString(),
                     "--version", release.Version
                 }
-            }) ?? throw new InvalidOperationException("ExApp Updater could not be started.");
+            };
+            if (!string.IsNullOrWhiteSpace(fallbackStagingPath))
+            {
+                startInfo.ArgumentList.Add("--fallback-staging");
+                startInfo.ArgumentList.Add(fallbackStagingPath);
+            }
+
+            _ = Process.Start(startInfo) ?? throw new InvalidOperationException("ExApp Updater could not be started.");
         }
         finally
         {

@@ -440,7 +440,26 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
             await _operations.RunAsync(serviceId, ServiceOperationKind.Update, async cancellationToken =>
             {
                 var package = await _catalogClient.ResolvePackageAsync(catalogItem, selected.Version, cancellationToken);
-                await _serviceClient.UpdateAsync(package.PackagePath, package.Sha256, package.IsDelta);
+                try
+                {
+                    await _serviceClient.UpdateAsync(package.PackagePath, package.Sha256, package.IsDelta);
+                }
+                catch (IpcException exception) when (package.IsDelta && IsDeltaFallbackCandidate(exception))
+                {
+                    await UpdateHistoryStore.AddAsync(new UpdateHistoryEntry(
+                        DateTimeOffset.Now,
+                        selected.Name,
+                        catalogItem.Version,
+                        "delta-fallback",
+                        exception.Message));
+                    var fullPackage = await _catalogClient.ResolvePackageAsync(
+                        catalogItem,
+                        selected.Version,
+                        cancellationToken,
+                        preferDelta: false);
+                    await _serviceClient.UpdateAsync(fullPackage.PackagePath, fullPackage.Sha256, isDelta: false);
+                }
+
                 ServiceChangeNotifier.NotifyChanged();
                 await LoadCatalogAsync();
                 await RefreshAsync(includeLogs: _selectedServiceId == serviceId);
@@ -928,6 +947,9 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
         catalogItem.Package is not null &&
         catalogItem.Status.Equals("available", StringComparison.OrdinalIgnoreCase) &&
         CompareVersions(catalogItem.Version, service.Version) > 0;
+
+    private static bool IsDeltaFallbackCandidate(IpcException exception) =>
+        exception.Code.StartsWith("delta.", StringComparison.OrdinalIgnoreCase);
 
     private static int CompareVersions(string left, string right)
     {
