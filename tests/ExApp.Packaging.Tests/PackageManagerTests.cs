@@ -1,5 +1,6 @@
 using ExApp.Packaging.Models;
 using System.IO.Compression;
+using System.Security.Cryptography;
 
 namespace ExApp.Packaging.Tests;
 
@@ -98,6 +99,43 @@ public sealed class PackageManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task InstallAsync_SignedPackageWithConfiguredKey_Installs()
+    {
+        using var signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var manager = CreateManager(signingKey.ExportSubjectPublicKeyInfoPem());
+
+        var result = await manager.InstallAsync(_packages.Create(signingKey: signingKey));
+
+        Assert.Equal("test-service", result.Manifest.Id);
+        Assert.Equal("1.0.0", result.State.CurrentVersion);
+    }
+
+    [Fact]
+    public async Task InstallAsync_UnsignedPackageWithConfiguredKey_RejectsPackage()
+    {
+        using var signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var manager = CreateManager(signingKey.ExportSubjectPublicKeyInfoPem());
+
+        var exception = await Assert.ThrowsAsync<PackageException>(
+            () => manager.InstallAsync(_packages.Create()));
+
+        Assert.Equal("signature.unsigned", exception.Code);
+    }
+
+    [Fact]
+    public async Task InstallAsync_SignedPackageWithWrongConfiguredKey_RejectsPackage()
+    {
+        using var signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var wrongKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var manager = CreateManager(wrongKey.ExportSubjectPublicKeyInfoPem());
+
+        var exception = await Assert.ThrowsAsync<PackageException>(
+            () => manager.InstallAsync(_packages.Create(signingKey: signingKey)));
+
+        Assert.Equal("signature.verificationFailed", exception.Code);
+    }
+
+    [Fact]
     public async Task InstallAsync_IncompatibleAppVersion_RejectsPackage()
     {
         var manager = CreateManager();
@@ -152,6 +190,50 @@ public sealed class PackageManagerTests : IDisposable
         Assert.Equal("1.1.0", state.PreviousVersion);
         Assert.EndsWith(Path.Combine("versions", "1.0.0"), manager.ResolveCurrentVersionDirectory("test-service"));
         Assert.Equal("1.0.0", Assert.Single(manager.GetInstalledServices()).CurrentVersion);
+    }
+
+    [Fact]
+    public async Task InstallDeltaAsync_ValidDelta_BuildsTargetVersionFromCurrentVersion()
+    {
+        var manager = CreateManager();
+        var basePackage = _packages.Create(version: "1.0.0");
+        var targetPackage = _packages.Create(version: "1.1.0");
+        await manager.InstallAsync(basePackage);
+
+        var deltaPackage = _packages.CreateDelta(basePackage, targetPackage);
+        var result = await manager.InstallDeltaAsync(deltaPackage);
+
+        Assert.True(result.AppliedDelta);
+        Assert.Equal("1.1.0", result.State.CurrentVersion);
+        Assert.Equal("1.0.0", result.State.PreviousVersion);
+        Assert.True(File.Exists(Path.Combine(result.InstallDirectory, "bin", "Test.Service.exe")));
+        Assert.True(File.Exists(Path.Combine(result.InstallDirectory, "bin", "shared.dat")));
+        Assert.Equal("payload-1.1.0", File.ReadAllText(Path.Combine(result.InstallDirectory, "bin", "Test.Service.exe")));
+        Assert.Equal("shared-payload", File.ReadAllText(Path.Combine(result.InstallDirectory, "bin", "shared.dat")));
+        Assert.Equal("1.1.0", manager.GetState("test-service")?.CurrentVersion);
+    }
+
+    [Fact]
+    public async Task InstallDeltaAsync_PatchDelta_BuildsTargetFileFromBaseChunks()
+    {
+        var manager = CreateManager();
+        var basePackage = _packages.Create(version: "1.0.0", largePayloadMarker: "base-marker");
+        var targetPackage = _packages.Create(version: "1.1.0", largePayloadMarker: "target-marker");
+        await manager.InstallAsync(basePackage);
+
+        var deltaPackage = _packages.CreateDeltaWithPatch(basePackage, targetPackage);
+        var result = await manager.InstallDeltaAsync(deltaPackage);
+
+        Assert.True(result.AppliedDelta);
+        Assert.Equal("1.1.0", result.State.CurrentVersion);
+        Assert.True(File.Exists(Path.Combine(result.InstallDirectory, "bin", "large.dat")));
+
+        using var targetArchive = ZipFile.OpenRead(targetPackage);
+        var targetEntry = targetArchive.GetEntry("bin/large.dat")!;
+        using var expected = new MemoryStream();
+        await targetEntry.Open().CopyToAsync(expected);
+        var installedBytes = await File.ReadAllBytesAsync(Path.Combine(result.InstallDirectory, "bin", "large.dat"));
+        Assert.Equal(expected.ToArray(), installedBytes);
     }
 
     [Fact]
@@ -221,11 +303,12 @@ public sealed class PackageManagerTests : IDisposable
         }
     }
 
-    private PackageManager CreateManager() => new(new PackageManagerOptions
+    private PackageManager CreateManager(string? servicePackageSigningPublicKeyPem = null) => new(new PackageManagerOptions
     {
         RootDirectory = Path.Combine(_temporaryRoot, "runtime"),
         AppVersion = "1.0.0",
         AgentVersion = "1.0.0",
-        Architecture = "x64"
+        Architecture = "x64",
+        ServicePackageSigningPublicKeyPem = servicePackageSigningPublicKeyPem
     });
 }

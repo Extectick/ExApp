@@ -37,3 +37,7 @@ jobs:
         run: |
           dotnet test tests/ExApp.Packaging.Tests/ExApp.Packaging.Tests.csproj --configuration Debug --no-build
           dotnet test tests/ExApp.Ipc.Tests/ExApp.Ipc.Tests.csproj --configuration Debug --no-build
+
+      - name: App update e2e smoke
+        shell: pwsh
+        run: ./tools/test-app-update-e2e.ps1 -Configuration Debug -BaseVersion 0.1.900 -TargetVersion 0.1.901

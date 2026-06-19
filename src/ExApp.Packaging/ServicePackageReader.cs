@@ -70,6 +70,9 @@ internal sealed class ServicePackageReader(PackageManagerOptions options)
     public ChecksumManifest ReadChecksums(string packageDirectory) =>
         ReadRequiredJson<ChecksumManifest>(Path.Combine(packageDirectory, "checksums.json"), "checksums.missing", "checksums.json is missing.");
 
+    public ServiceDeltaManifest ReadDeltaManifest(string packageDirectory) =>
+        ReadRequiredJson<ServiceDeltaManifest>(Path.Combine(packageDirectory, "service-delta.json"), "delta.missing", "service-delta.json is missing.");
+
     private static T ReadRequiredJson<T>(string path, string missingCode, string missingMessage)
     {
         if (!File.Exists(path))

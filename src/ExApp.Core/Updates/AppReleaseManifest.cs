@@ -9,6 +9,8 @@ public sealed record AppReleaseManifest
     public string? ReleaseNotes { get; init; }
     public AppReleasePackage Package { get; init; } = new();
     public AppDeltaPackage? Delta { get; init; }
+    public IReadOnlyList<AppDeltaPackage> Deltas { get; init; } = [];
+    public AppManifestSignature? Signature { get; init; }
 }
 
 public sealed record AppReleasePackage
@@ -25,7 +27,15 @@ public sealed record AppDeltaPackage
     public string Sha256 { get; init; } = string.Empty;
     public long Size { get; init; }
     public int ChangedFiles { get; init; }
+    public int PatchedFiles { get; init; }
     public int DeletedFiles { get; init; }
+}
+
+public sealed record AppManifestSignature
+{
+    public string Algorithm { get; init; } = string.Empty;
+    public string KeyId { get; init; } = string.Empty;
+    public string Value { get; init; } = string.Empty;
 }
 
 public sealed record AppUpdateCheckResult(

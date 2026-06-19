@@ -6,12 +6,23 @@ param(
     [string]$CertificatePassword,
     [string]$CertificateBase64,
     [string]$TimestampUrl = "http://timestamp.digicert.com",
+    [string]$AppUpdateSigningPublicKeyPem,
     [switch]$RequireSignature
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$outputRoot = Join-Path $repoRoot $OutputDirectory
+
+function Resolve-RepoPath {
+    param([string]$PathValue)
+    if ([IO.Path]::IsPathRooted($PathValue)) {
+        return $PathValue
+    }
+
+    return Join-Path $repoRoot $PathValue
+}
+
+$outputRoot = Resolve-RepoPath $OutputDirectory
 $publishRoot = Join-Path $outputRoot "publish"
 $desktopRoot = Join-Path $publishRoot "desktop"
 $agentRoot = Join-Path $publishRoot "agent"
@@ -23,16 +34,18 @@ New-Item -ItemType Directory -Force $desktopRoot, $agentRoot, $updaterRoot | Out
 
 dotnet publish (Join-Path $repoRoot "src/ExApp.Desktop/ExApp.Desktop.csproj") `
     -c $Configuration -p:Platform=x64 -r win-x64 --self-contained true `
-    -p:Version=$Version -p:PublishTrimmed=false -o $desktopRoot | Out-Host
+    -p:Version=$Version -p:PublishTrimmed=false `
+    -p:AppUpdateSigningPublicKeyPem="$AppUpdateSigningPublicKeyPem" `
+    -o $desktopRoot | Out-Host
 dotnet publish (Join-Path $repoRoot "src/ExApp.Agent/ExApp.Agent.csproj") `
     -c $Configuration -r win-x64 --self-contained true `
-    -p:Version=$Version -p:PublishSingleFile=true -o $agentRoot | Out-Host
+    -p:Version=$Version -p:PublishSingleFile=false -o $agentRoot | Out-Host
 dotnet publish (Join-Path $repoRoot "src/ExApp.Updater/ExApp.Updater.csproj") `
     -c $Configuration -r win-x64 --self-contained true `
-    -p:Version=$Version -p:PublishSingleFile=true -o $updaterRoot | Out-Host
+    -p:Version=$Version -p:PublishSingleFile=false -o $updaterRoot | Out-Host
 
-Copy-Item (Join-Path $agentRoot "ExApp.Agent.exe") $desktopRoot -Force
-Copy-Item (Join-Path $updaterRoot "ExApp.Updater.exe") $desktopRoot -Force
+Copy-Item $agentRoot (Join-Path $desktopRoot "agent") -Recurse -Force
+Copy-Item $updaterRoot (Join-Path $desktopRoot "updater") -Recurse -Force
 $desktopBuildRoot = Join-Path $repoRoot "src/ExApp.Desktop/bin/x64/$Configuration/net8.0-windows10.0.26100.0/win-x64"
 if (Test-Path $desktopBuildRoot) {
     Get-ChildItem -Path $desktopBuildRoot -Include "*.xbf", "*.pri" -Recurse -File |

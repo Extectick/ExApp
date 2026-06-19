@@ -57,62 +57,37 @@ public sealed class AppUpdateClient : IDisposable
             return targetPath;
         }
 
-        var temporaryPath = $"{targetPath}.{Guid.NewGuid():N}.download";
-        try
+        var temporaryPath = $"{targetPath}.download";
+        if (!IsHttp(package.Url))
         {
-            if (!IsHttp(package.Url))
-            {
-                File.Copy(Path.GetFullPath(package.Url), temporaryPath, overwrite: true);
-                progress?.Report(1);
-            }
-            else
-            {
-                using var response = await _httpClient.GetAsync(
-                    package.Url,
-                    HttpCompletionOption.ResponseHeadersRead,
-                    cancellationToken);
-                response.EnsureSuccessStatusCode();
-                var total = response.Content.Headers.ContentLength ?? package.Size;
-                await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
-                await using var output = new FileStream(
-                    temporaryPath,
-                    FileMode.CreateNew,
-                    FileAccess.Write,
-                    FileShare.None,
-                    81920,
-                    FileOptions.Asynchronous | FileOptions.SequentialScan);
-                var buffer = new byte[81920];
-                long received = 0;
-                int count;
-                while ((count = await input.ReadAsync(buffer, cancellationToken)) > 0)
-                {
-                    await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
-                    received += count;
-                    if (total > 0)
-                    {
-                        progress?.Report(Math.Clamp((double)received / total, 0, 1));
-                    }
-                }
-
-                await output.FlushAsync(cancellationToken);
-            }
-            var hash = await ComputeSha256Async(temporaryPath, cancellationToken);
-            if (!hash.Equals(package.Sha256, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("ExApp update SHA-256 does not match the release manifest.");
-            }
-
-            File.Move(temporaryPath, targetPath, overwrite: true);
+            File.Copy(Path.GetFullPath(package.Url), temporaryPath, overwrite: true);
             progress?.Report(1);
-            return targetPath;
         }
-        finally
+        else
         {
-            if (File.Exists(temporaryPath))
+            if (File.Exists(temporaryPath) &&
+                package.Size > 0 &&
+                new FileInfo(temporaryPath).Length == package.Size &&
+                (await ComputeSha256Async(temporaryPath, cancellationToken)).Equals(package.Sha256, StringComparison.OrdinalIgnoreCase))
             {
-                File.Delete(temporaryPath);
+                File.Move(temporaryPath, targetPath, overwrite: true);
+                progress?.Report(1);
+                return targetPath;
             }
+
+            await DownloadHttpWithResumeAsync(package.Url, temporaryPath, package.Size, progress, cancellationToken);
         }
+
+        var hash = await ComputeSha256Async(temporaryPath, cancellationToken);
+        if (!hash.Equals(package.Sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            File.Delete(temporaryPath);
+            throw new InvalidOperationException("ExApp update SHA-256 does not match the release manifest.");
+        }
+
+        File.Move(temporaryPath, targetPath, overwrite: true);
+        progress?.Report(1);
+        return targetPath;
     }
 
     public void Dispose() => _httpClient.Dispose();
@@ -148,12 +123,15 @@ public sealed class AppUpdateClient : IDisposable
         string source,
         CancellationToken cancellationToken)
     {
-        var json = Uri.TryCreate(source, UriKind.Absolute, out var uri) &&
-                   (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-            ? await _httpClient.GetStringAsync(uri, cancellationToken)
+        var requireSignature = Uri.TryCreate(source, UriKind.Absolute, out var uri) &&
+                               (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+        var json = requireSignature
+            ? await _httpClient.GetStringAsync(uri!, cancellationToken)
             : await File.ReadAllTextAsync(Path.GetFullPath(source), cancellationToken);
-        return JsonSerializer.Deserialize<AppReleaseManifest>(json, JsonOptions)
+        var manifest = JsonSerializer.Deserialize<AppReleaseManifest>(json, JsonOptions)
             ?? throw new InvalidOperationException("ExApp update manifest is empty.");
+        AppUpdateSignatureVerifier.Verify(json, manifest, requireSignature);
+        return manifest;
     }
 
     private static bool MatchesChannel(JsonElement release, string channel)
@@ -173,17 +151,38 @@ public sealed class AppUpdateClient : IDisposable
             manifest.Package.Size <= 0 ||
             manifest.Package.Sha256.Length != 64 ||
             !manifest.Package.Sha256.All(Uri.IsHexDigit) ||
-            (manifest.Delta is not null && !IsValidDelta(manifest.Delta)))
+            (manifest.Delta is not null && !IsValidDelta(manifest.Delta)) ||
+            manifest.Deltas.Any(static delta => !IsValidDelta(delta)))
         {
             throw new InvalidOperationException("ExApp update manifest is invalid.");
         }
     }
 
-    private static AppPackageDescriptor SelectPackage(AppReleaseManifest manifest, string currentVersion) =>
-        manifest.Delta is { } delta &&
-        NormalizeVersion(delta.BaseVersion).Equals(NormalizeVersion(currentVersion), StringComparison.OrdinalIgnoreCase)
+    private static AppPackageDescriptor SelectPackage(AppReleaseManifest manifest, string currentVersion)
+    {
+        var normalizedCurrent = NormalizeVersion(currentVersion);
+        var delta = EnumerateDeltas(manifest)
+            .Where(delta => NormalizeVersion(delta.BaseVersion).Equals(normalizedCurrent, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static delta => delta.Size)
+            .FirstOrDefault();
+        return delta is not null
             ? new AppPackageDescriptor(delta.Url, delta.Sha256, delta.Size, delta.BaseVersion)
             : new AppPackageDescriptor(manifest.Package.Url, manifest.Package.Sha256, manifest.Package.Size, BaseVersion: null);
+    }
+
+    private static IEnumerable<AppDeltaPackage> EnumerateDeltas(AppReleaseManifest manifest)
+    {
+        foreach (var delta in manifest.Deltas)
+        {
+            yield return delta;
+        }
+
+        if (manifest.Delta is not null &&
+            manifest.Deltas.All(delta => !delta.BaseVersion.Equals(manifest.Delta.BaseVersion, StringComparison.OrdinalIgnoreCase)))
+        {
+            yield return manifest.Delta;
+        }
+    }
 
     private static bool IsValidDelta(AppDeltaPackage delta) =>
         TryParseVersion(delta.BaseVersion, out _) &&
@@ -192,6 +191,7 @@ public sealed class AppUpdateClient : IDisposable
         delta.Sha256.Length == 64 &&
         delta.Sha256.All(Uri.IsHexDigit) &&
         delta.ChangedFiles >= 0 &&
+        delta.PatchedFiles >= 0 &&
         delta.DeletedFiles >= 0;
 
     private static string GetPackageFileName(string source, string version, string? baseVersion)
@@ -217,6 +217,94 @@ public sealed class AppUpdateClient : IDisposable
         await using var stream = File.OpenRead(path);
         return Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken))
             .ToLowerInvariant();
+    }
+
+    private async Task DownloadHttpWithResumeAsync(
+        string url,
+        string temporaryPath,
+        long expectedSize,
+        IProgress<double>? progress,
+        CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 4;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await DownloadHttpAttemptAsync(url, temporaryPath, expectedSize, progress, cancellationToken);
+                return;
+            }
+            catch (Exception exception) when (
+                attempt < maxAttempts &&
+                exception is HttpRequestException or IOException or TaskCanceledException)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(300 * attempt * attempt), cancellationToken);
+            }
+        }
+
+        await DownloadHttpAttemptAsync(url, temporaryPath, expectedSize, progress, cancellationToken);
+    }
+
+    private async Task DownloadHttpAttemptAsync(
+        string url,
+        string temporaryPath,
+        long expectedSize,
+        IProgress<double>? progress,
+        CancellationToken cancellationToken)
+    {
+        var existingLength = File.Exists(temporaryPath) ? new FileInfo(temporaryPath).Length : 0;
+        if (expectedSize > 0 && existingLength > expectedSize)
+        {
+            File.Delete(temporaryPath);
+            existingLength = 0;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        if (existingLength > 0)
+        {
+            request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existingLength, null);
+        }
+
+        using var response = await _httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        if (existingLength > 0 && response.StatusCode == System.Net.HttpStatusCode.OK)
+        {
+            File.Delete(temporaryPath);
+            existingLength = 0;
+        }
+        else if (existingLength > 0 && response.StatusCode != System.Net.HttpStatusCode.PartialContent)
+        {
+            response.EnsureSuccessStatusCode();
+            throw new IOException("The update server did not accept a ranged download request.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var contentLength = response.Content.Headers.ContentLength ?? 0;
+        var total = expectedSize > 0 ? expectedSize : existingLength + contentLength;
+        await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using var output = new FileStream(
+            temporaryPath,
+            existingLength > 0 ? FileMode.Append : FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        var buffer = new byte[81920];
+        var received = existingLength;
+        int count;
+        while ((count = await input.ReadAsync(buffer, cancellationToken)) > 0)
+        {
+            await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
+            received += count;
+            if (total > 0)
+            {
+                progress?.Report(Math.Clamp((double)received / total, 0, 1));
+            }
+        }
+
+        await output.FlushAsync(cancellationToken);
     }
 
     private static Version ParseVersion(string value) =>

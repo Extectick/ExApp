@@ -4,36 +4,78 @@ using System.Text.Json;
 
 var arguments = ParseArguments(args);
 var releaseVersion = arguments.GetValueOrDefault("version") ?? "unknown";
-if (!arguments.TryGetValue("staging", out var stagingPath) ||
-    !arguments.TryGetValue("target", out var targetPath) ||
+var recoveryMode = arguments.ContainsKey("recover");
+var noRestart = arguments.TryGetValue("no-restart", out var noRestartText) &&
+                bool.TryParse(noRestartText, out var noRestartValue) &&
+                noRestartValue;
+if (!arguments.TryGetValue("target", out var targetPath) ||
     !arguments.TryGetValue("desktop-pid", out var desktopPidText) ||
     !int.TryParse(desktopPidText, out var desktopPid))
 {
     return 2;
 }
 
-stagingPath = Path.GetFullPath(stagingPath);
 targetPath = Path.GetFullPath(targetPath);
-if (!Directory.Exists(stagingPath) ||
-    Path.GetPathRoot(targetPath)?.Equals(targetPath, StringComparison.OrdinalIgnoreCase) == true ||
-    stagingPath.Equals(targetPath, StringComparison.OrdinalIgnoreCase))
+if (Path.GetPathRoot(targetPath)?.Equals(targetPath, StringComparison.OrdinalIgnoreCase) == true)
 {
     return 3;
 }
 
-var updateRoot = Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-    "ExApp",
-    "updates");
+string? stagingPath = null;
+if (!recoveryMode)
+{
+    if (!arguments.TryGetValue("staging", out stagingPath))
+    {
+        return 2;
+    }
+
+    stagingPath = Path.GetFullPath(stagingPath);
+    if (!Directory.Exists(stagingPath) ||
+        stagingPath.Equals(targetPath, StringComparison.OrdinalIgnoreCase))
+    {
+        return 3;
+    }
+}
+
+var updateRoot = arguments.TryGetValue("update-root", out var updateRootArgument)
+    ? Path.GetFullPath(updateRootArgument)
+    : Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "ExApp",
+        "updates");
 var backupPath = Path.Combine(updateRoot, "backup");
 var logPath = Path.Combine(updateRoot, "updater.log");
 var historyPath = Path.Combine(updateRoot, "history.jsonl");
+var statePath = Path.Combine(updateRoot, "update-state.json");
 Directory.CreateDirectory(updateRoot);
 
 UpdatePlan? plan = null;
 
 try
 {
+    if (recoveryMode)
+    {
+        await WaitForExitOrKillAsync(desktopPid, TimeSpan.FromSeconds(10));
+        StopProcesses("ExApp.Agent");
+        plan = await TryReadPlanAsync(backupPath)
+            ?? throw new InvalidOperationException("Interrupted update backup plan is missing.");
+        await RollbackPlanAsync(targetPath, backupPath, plan);
+        await AppendHistoryAsync(historyPath, releaseVersion, "recovered", "Interrupted update was rolled back on next launch.");
+        await WriteStateAsync(statePath, new UpdateState(releaseVersion, targetPath, "recovered", DateTimeOffset.UtcNow, null));
+        TryDeleteDirectory(backupPath);
+        if (!noRestart)
+        {
+            StartDesktop(targetPath);
+        }
+
+        return 0;
+    }
+
+    if (stagingPath is null)
+    {
+        return 2;
+    }
+
     var manifest = await LoadFileManifestAsync(stagingPath);
     var delta = await LoadDeltaManifestAsync(stagingPath);
     ValidateDeltaManifest(delta, manifest);
@@ -57,6 +99,7 @@ try
     plan = await BuildPlanAsync(targetPath, manifest, delta);
     await BackupPlanAsync(targetPath, backupPath, plan);
     await WritePlanAsync(backupPath, plan);
+    await WriteStateAsync(statePath, new UpdateState(releaseVersion, targetPath, "applying", DateTimeOffset.UtcNow, null));
     await ApplyPlanAsync(stagingPath, targetPath, plan);
     CopyAppFileManifest(stagingPath, targetPath);
     DeleteEmptyDirectories(targetPath);
@@ -67,22 +110,23 @@ try
         throw new InvalidOperationException("Updated ExApp executable is invalid after apply.");
     }
 
-    var process = Process.Start(new ProcessStartInfo(desktopPath)
+    if (!noRestart)
     {
-        UseShellExecute = false,
-        WorkingDirectory = targetPath
-    }) ?? throw new InvalidOperationException("Updated ExApp process could not be started.");
+        var process = StartDesktop(targetPath);
 
-    await Task.Delay(TimeSpan.FromSeconds(5));
-    if (process.HasExited)
-    {
-        throw new InvalidOperationException($"Updated ExApp exited with code {process.ExitCode}.");
+        await Task.Delay(TimeSpan.FromSeconds(5));
+        if (process.HasExited)
+        {
+            throw new InvalidOperationException($"Updated ExApp exited with code {process.ExitCode}.");
+        }
     }
 
     await File.AppendAllTextAsync(
         logPath,
         $"{DateTimeOffset.Now:o} Update completed. Copied {plan.Copy.Count}, deleted {plan.Delete.Count}, unchanged {plan.UnchangedCount}.{Environment.NewLine}");
     await AppendHistoryAsync(historyPath, releaseVersion, "installed", null);
+    await WriteStateAsync(statePath, new UpdateState(releaseVersion, targetPath, "installed", DateTimeOffset.UtcNow, null));
+    TryDeleteDirectory(backupPath);
     return 0;
 }
 catch (Exception exception)
@@ -98,15 +142,7 @@ catch (Exception exception)
             await RollbackPlanAsync(targetPath, backupPath, plan);
         }
 
-        var desktopPath = Path.Combine(targetPath, "ExApp.Desktop.exe");
-        if (File.Exists(desktopPath))
-        {
-            Process.Start(new ProcessStartInfo(desktopPath)
-            {
-                UseShellExecute = false,
-                WorkingDirectory = targetPath
-            });
-        }
+        StartDesktopIfExists(targetPath);
     }
     catch (Exception rollbackException)
     {
@@ -114,6 +150,8 @@ catch (Exception exception)
     }
 
     await AppendHistoryAsync(historyPath, releaseVersion, "rolled-back", exception.Message);
+    await WriteStateAsync(statePath, new UpdateState(releaseVersion, targetPath, "rolled-back", DateTimeOffset.UtcNow, exception.Message));
+    TryDeleteDirectory(backupPath);
     return 1;
 }
 
@@ -218,6 +256,41 @@ static void ValidateDeltaManifest(AppDeltaManifest? delta, AppFileManifest manif
         }
     }
 
+    foreach (var patch in delta.Patches ?? [])
+    {
+        var relativePath = NormalizeRelativePath(patch.Path);
+        ValidateRelativePath(patch.DataPath);
+        if (!desired.TryGetValue(relativePath, out var expected) ||
+            !expected.Sha256.Equals(patch.TargetSha256, StringComparison.OrdinalIgnoreCase) ||
+            expected.Size != patch.TargetSize)
+        {
+            throw new InvalidOperationException($"Application delta patch '{patch.Path}' is not part of the target manifest.");
+        }
+
+        if (patch.BlockSize <= 0 ||
+            patch.BaseSize < 0 ||
+            patch.BaseSha256.Length != 64 ||
+            !patch.BaseSha256.All(Uri.IsHexDigit) ||
+            patch.TargetSize < 0 ||
+            patch.TargetSha256.Length != 64 ||
+            !patch.TargetSha256.All(Uri.IsHexDigit) ||
+            patch.Operations.Count == 0)
+        {
+            throw new InvalidOperationException($"Application delta patch '{patch.Path}' is invalid.");
+        }
+
+        foreach (var operation in patch.Operations)
+        {
+            if (operation.Length <= 0 ||
+                operation.Offset < 0 ||
+                operation.DataOffset < 0 ||
+                operation.Type is not ("copy" or "data"))
+            {
+                throw new InvalidOperationException($"Application delta patch operation for '{patch.Path}' is invalid.");
+            }
+        }
+    }
+
     foreach (var pathToDelete in delta.Delete.Select(NormalizeRelativePath))
     {
         if (desired.ContainsKey(pathToDelete))
@@ -250,6 +323,15 @@ static async Task ValidateStagingAsync(string stagingRoot, AppFileManifest manif
             throw new InvalidOperationException($"Staged application file '{file.Path}' has an invalid SHA-256.");
         }
     }
+
+    foreach (var patch in delta?.Patches ?? [])
+    {
+        var dataPath = GetSafePath(stagingRoot, patch.DataPath);
+        if (!File.Exists(dataPath))
+        {
+            throw new FileNotFoundException($"Staged application patch data '{patch.DataPath}' is missing.", dataPath);
+        }
+    }
 }
 
 static async Task<UpdatePlan> BuildPlanAsync(string targetRoot, AppFileManifest manifest, AppDeltaManifest? delta)
@@ -259,8 +341,10 @@ static async Task<UpdatePlan> BuildPlanAsync(string targetRoot, AppFileManifest 
         static file => file,
         StringComparer.OrdinalIgnoreCase);
     var copy = new List<CopyOperation>();
+    var patch = new List<PatchOperation>();
     var unchanged = 0;
     var copyCandidates = delta?.Files ?? manifest.Files;
+    var patchCandidates = delta?.Patches ?? [];
 
     foreach (var file in copyCandidates)
     {
@@ -277,16 +361,40 @@ static async Task<UpdatePlan> BuildPlanAsync(string targetRoot, AppFileManifest 
         copy.Add(new CopyOperation(relativePath, File.Exists(targetPath)));
     }
 
+    foreach (var patchEntry in patchCandidates)
+    {
+        var relativePath = NormalizeRelativePath(patchEntry.Path);
+        var targetPath = GetSafePath(targetRoot, relativePath);
+        if (File.Exists(targetPath) &&
+            new FileInfo(targetPath).Length == patchEntry.TargetSize &&
+            (await ComputeSha256Async(targetPath)).Equals(patchEntry.TargetSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            unchanged++;
+            continue;
+        }
+
+        if (!File.Exists(targetPath) ||
+            new FileInfo(targetPath).Length != patchEntry.BaseSize ||
+            !(await ComputeSha256Async(targetPath)).Equals(patchEntry.BaseSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Delta patch cannot be applied because installed file '{relativePath}' does not match the patch base.");
+        }
+
+        patch.Add(new PatchOperation(relativePath, patchEntry.DataPath, File.Exists(targetPath), patchEntry));
+    }
+
     var delete = new List<string>();
     if (delta is not null)
     {
-        var copyPaths = new HashSet<string>(
-            copyCandidates.Select(static file => NormalizeRelativePath(file.Path)),
+        var payloadPaths = new HashSet<string>(
+            copyCandidates.Select(static file => NormalizeRelativePath(file.Path))
+                .Concat(patchCandidates.Select(static item => NormalizeRelativePath(item.Path))),
             StringComparer.OrdinalIgnoreCase);
         foreach (var file in manifest.Files)
         {
             var relativePath = NormalizeRelativePath(file.Path);
-            if (copyPaths.Contains(relativePath))
+            if (payloadPaths.Contains(relativePath))
             {
                 continue;
             }
@@ -302,7 +410,7 @@ static async Task<UpdatePlan> BuildPlanAsync(string targetRoot, AppFileManifest 
         }
 
         delete.AddRange(delta.Delete.Select(NormalizeRelativePath));
-        unchanged = Math.Max(0, manifest.Files.Count - copy.Count);
+        unchanged = Math.Max(0, manifest.Files.Count - copy.Count - patch.Count);
     }
     else if (Directory.Exists(targetRoot))
     {
@@ -321,7 +429,7 @@ static async Task<UpdatePlan> BuildPlanAsync(string targetRoot, AppFileManifest 
         }
     }
 
-    return new UpdatePlan(copy, delete, unchanged);
+    return new UpdatePlan(copy, patch, delete, unchanged);
 }
 
 static async Task BackupPlanAsync(string targetRoot, string backupRoot, UpdatePlan plan)
@@ -334,7 +442,9 @@ static async Task BackupPlanAsync(string targetRoot, string backupRoot, UpdatePl
         File.Copy(currentManifestPath, Path.Combine(backupRoot, "app-files.json"), overwrite: true);
     }
 
-    foreach (var relativePath in plan.Copy.Where(static operation => operation.HadExistingFile).Select(static operation => operation.Path).Concat(plan.Delete))
+    foreach (var relativePath in plan.Copy.Where(static operation => operation.HadExistingFile).Select(static operation => operation.Path)
+                 .Concat(plan.Patch.Where(static operation => operation.HadExistingFile).Select(static operation => operation.Path))
+                 .Concat(plan.Delete))
     {
         var source = GetSafePath(targetRoot, relativePath);
         if (!File.Exists(source))
@@ -372,6 +482,32 @@ static async Task ApplyPlanAsync(string stagingRoot, string targetRoot, UpdatePl
         }
     }
 
+    foreach (var operation in plan.Patch)
+    {
+        var destination = GetSafePath(targetRoot, operation.Path);
+        var temporary = $"{destination}.{Guid.NewGuid():N}.tmp";
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        try
+        {
+            await ApplyPatchAsync(targetRoot, stagingRoot, operation.Patch, temporary);
+            var hash = await ComputeSha256Async(temporary);
+            if (!hash.Equals(operation.Patch.TargetSha256, StringComparison.OrdinalIgnoreCase) ||
+                new FileInfo(temporary).Length != operation.Patch.TargetSize)
+            {
+                throw new InvalidOperationException($"Patched application file '{operation.Path}' failed validation.");
+            }
+
+            File.Move(temporary, destination, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
+        }
+    }
+
     foreach (var relativePath in plan.Delete)
     {
         var path = GetSafePath(targetRoot, relativePath);
@@ -387,7 +523,8 @@ static async Task ApplyPlanAsync(string stagingRoot, string targetRoot, UpdatePl
 static async Task RollbackPlanAsync(string targetRoot, string backupRoot, UpdatePlan plan)
 {
     var filesRoot = Path.Combine(backupRoot, "files");
-    foreach (var operation in plan.Copy.Where(static operation => !operation.HadExistingFile))
+    foreach (var operation in plan.Copy.Where(static operation => !operation.HadExistingFile)
+                 .Concat(plan.Patch.Where(static operation => !operation.HadExistingFile).Select(static operation => new CopyOperation(operation.Path, operation.HadExistingFile))))
     {
         var target = GetSafePath(targetRoot, operation.Path);
         if (File.Exists(target))
@@ -396,7 +533,9 @@ static async Task RollbackPlanAsync(string targetRoot, string backupRoot, Update
         }
     }
 
-    foreach (var relativePath in plan.Copy.Where(static operation => operation.HadExistingFile).Select(static operation => operation.Path).Concat(plan.Delete))
+    foreach (var relativePath in plan.Copy.Where(static operation => operation.HadExistingFile).Select(static operation => operation.Path)
+                 .Concat(plan.Patch.Where(static operation => operation.HadExistingFile).Select(static operation => operation.Path))
+                 .Concat(plan.Delete))
     {
         var backup = GetSafePath(filesRoot, relativePath);
         if (!File.Exists(backup))
@@ -433,10 +572,111 @@ static void CopyAppFileManifest(string stagingRoot, string targetRoot)
         overwrite: true);
 }
 
+static Process StartDesktop(string targetRoot)
+{
+    var desktopPath = Path.Combine(targetRoot, "ExApp.Desktop.exe");
+    return Process.Start(new ProcessStartInfo(desktopPath)
+    {
+        UseShellExecute = false,
+        WorkingDirectory = targetRoot
+    }) ?? throw new InvalidOperationException("Updated ExApp process could not be started.");
+}
+
+static void StartDesktopIfExists(string targetRoot)
+{
+    var desktopPath = Path.Combine(targetRoot, "ExApp.Desktop.exe");
+    if (!File.Exists(desktopPath))
+    {
+        return;
+    }
+
+    Process.Start(new ProcessStartInfo(desktopPath)
+    {
+        UseShellExecute = false,
+        WorkingDirectory = targetRoot
+    });
+}
+
+static async Task ApplyPatchAsync(
+    string targetRoot,
+    string stagingRoot,
+    AppFilePatchEntry patch,
+    string destination)
+{
+    var basePath = GetSafePath(targetRoot, patch.Path);
+    var dataPath = GetSafePath(stagingRoot, patch.DataPath);
+    if (!File.Exists(basePath))
+    {
+        throw new FileNotFoundException($"Base application file '{patch.Path}' is missing.", basePath);
+    }
+
+    if (new FileInfo(basePath).Length != patch.BaseSize)
+    {
+        throw new InvalidOperationException($"Base application file '{patch.Path}' has an invalid size.");
+    }
+
+    if (!(await ComputeSha256Async(basePath)).Equals(patch.BaseSha256, StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException($"Base application file '{patch.Path}' has an invalid SHA-256.");
+    }
+
+    if (!File.Exists(dataPath))
+    {
+        throw new FileNotFoundException($"Application patch data '{patch.DataPath}' is missing.", dataPath);
+    }
+
+    await using var baseStream = File.Open(basePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+    await using var dataStream = File.Open(dataPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+    await using var output = File.Create(destination);
+    var buffer = new byte[81920];
+    foreach (var operation in patch.Operations)
+    {
+        Stream source;
+        long offset;
+        if (operation.Type.Equals("copy", StringComparison.OrdinalIgnoreCase))
+        {
+            source = baseStream;
+            offset = operation.Offset;
+        }
+        else if (operation.Type.Equals("data", StringComparison.OrdinalIgnoreCase))
+        {
+            source = dataStream;
+            offset = operation.DataOffset;
+        }
+        else
+        {
+            throw new InvalidOperationException($"Unsupported patch operation '{operation.Type}'.");
+        }
+
+        source.Seek(offset, SeekOrigin.Begin);
+        var remaining = operation.Length;
+        while (remaining > 0)
+        {
+            var read = await source.ReadAsync(buffer.AsMemory(0, Math.Min(buffer.Length, remaining)));
+            if (read == 0)
+            {
+                throw new EndOfStreamException($"Patch operation for '{patch.Path}' exceeded source length.");
+            }
+
+            await output.WriteAsync(buffer.AsMemory(0, read));
+            remaining -= read;
+        }
+    }
+}
+
 static Task WritePlanAsync(string backupRoot, UpdatePlan plan)
 {
     var path = Path.Combine(backupRoot, "update-plan.json");
     var json = JsonSerializer.Serialize(plan, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true
+        });
+    return File.WriteAllTextAsync(path, json);
+}
+
+static Task WriteStateAsync(string path, UpdateState state)
+{
+    var json = JsonSerializer.Serialize(state, new JsonSerializerOptions(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
     });
@@ -550,6 +790,21 @@ static void DeleteEmptyDirectories(string root)
     }
 }
 
+static void TryDeleteDirectory(string path)
+{
+    try
+    {
+        if (Directory.Exists(path))
+        {
+            Directory.Delete(path, recursive: true);
+        }
+    }
+    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+    {
+        // Stale backup cleanup must not turn a completed update into a failed update.
+    }
+}
+
 static Task AppendHistoryAsync(string path, string version, string status, string? message)
 {
     var entry = JsonSerializer.Serialize(new
@@ -580,13 +835,44 @@ internal sealed record AppDeltaManifest(
     string Version,
     DateTimeOffset GeneratedAt,
     List<AppFileEntry> Files,
+    List<AppFilePatchEntry>? Patches,
     List<string> Delete);
+
+internal sealed record AppFilePatchEntry(
+    string Path,
+    int BlockSize,
+    long BaseSize,
+    string BaseSha256,
+    long TargetSize,
+    string TargetSha256,
+    string DataPath,
+    List<AppFilePatchOperation> Operations);
+
+internal sealed record AppFilePatchOperation(
+    string Type,
+    long Offset,
+    long DataOffset,
+    int Length);
+
+internal sealed record UpdateState(
+    string Version,
+    string TargetPath,
+    string Status,
+    DateTimeOffset UpdatedAt,
+    string? Error);
 
 internal sealed record UpdatePlan(
     List<CopyOperation> Copy,
+    List<PatchOperation> Patch,
     List<string> Delete,
     int UnchangedCount);
 
 internal sealed record CopyOperation(
     string Path,
     bool HadExistingFile);
+
+internal sealed record PatchOperation(
+    string Path,
+    string DataPath,
+    bool HadExistingFile,
+    AppFilePatchEntry Patch);

@@ -36,23 +36,152 @@ jobs:
           dotnet test tests/ExApp.Packaging.Tests/ExApp.Packaging.Tests.csproj --configuration Release
           dotnet test tests/ExApp.Ipc.Tests/ExApp.Ipc.Tests.csproj --configuration Release
 
-      - name: Build mock service package
+      - name: Build service packages
         shell: pwsh
-        run: ./tools/package-mock-service.ps1 -Configuration Release
+        env:
+          SERVICE_PACKAGE_SIGNING_PRIVATE_KEY_PEM: ${{ secrets.SERVICE_PACKAGE_SIGNING_PRIVATE_KEY_PEM }}
+          SERVICE_PACKAGE_SIGNING_PRIVATE_KEY_BASE64: ${{ secrets.SERVICE_PACKAGE_SIGNING_PRIVATE_KEY_BASE64 }}
+          SERVICE_PACKAGE_SIGNING_KEY_ID: ${{ vars.SERVICE_PACKAGE_SIGNING_KEY_ID }}
+          REQUIRE_SERVICE_PACKAGE_SIGNATURE: ${{ vars.REQUIRE_SERVICE_PACKAGE_SIGNATURE }}
+        run: |
+          $keyId = if ($env:SERVICE_PACKAGE_SIGNING_KEY_ID) { $env:SERVICE_PACKAGE_SIGNING_KEY_ID } else { 'exapp-service-package-2026' }
+          $requireSignature = $env:REQUIRE_SERVICE_PACKAGE_SIGNATURE -eq 'true'
+          $manifests = @(Get-ChildItem services -Filter service.manifest.json -Recurse -File)
+          if ($manifests.Count -eq 0) {
+            throw "No service manifests were found under services/."
+          }
+
+          foreach ($manifest in $manifests) {
+            $serviceDirectory = Split-Path $manifest.FullName -Parent
+            ./tools/package-service.ps1 `
+              -ServiceDirectory $serviceDirectory `
+              -Configuration Release `
+              -ServicePackageSigningPrivateKeyPem $env:SERVICE_PACKAGE_SIGNING_PRIVATE_KEY_PEM `
+              -ServicePackageSigningPrivateKeyBase64 $env:SERVICE_PACKAGE_SIGNING_PRIVATE_KEY_BASE64 `
+              -ServicePackageSigningKeyId $keyId `
+              -RequireSignature:$requireSignature
+          }
+
+      - name: Build service delta packages
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $headers = @{
+            "User-Agent" = "ExApp-Services-Release"
+            "Accept" = "application/vnd.github+json"
+            "Authorization" = "Bearer $env:GITHUB_TOKEN"
+          }
+          $releases = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPOSITORY/releases?per_page=50"
+          $previousReleases = @($releases |
+            Where-Object {
+              -not $_.draft -and
+              $_.tag_name -like 'services-v*' -and
+              $_.tag_name -ne $env:RELEASE_TAG
+            } |
+            Select-Object -First 3)
+          if ($previousReleases.Count -eq 0) {
+            return
+          }
+
+          foreach ($previous in $previousReleases) {
+            $catalogAsset = $previous.assets | Where-Object { $_.name -eq 'services.stable.json' } | Select-Object -First 1
+            if (-not $catalogAsset) {
+              continue
+            }
+
+            $previousCatalogPath = "artifacts/previous-$($previous.tag_name)-services.stable.json"
+            Invoke-WebRequest -Headers @{ "User-Agent" = "ExApp-Services-Release" } -Uri $catalogAsset.browser_download_url -OutFile $previousCatalogPath
+            $previousCatalog = Get-Content -Raw $previousCatalogPath | ConvertFrom-Json -Depth 20
+
+            foreach ($manifestPath in Get-ChildItem services -Filter service.manifest.json -Recurse -File) {
+              $service = Get-Content -Raw $manifestPath.FullName | ConvertFrom-Json -Depth 20
+              $previousService = @($previousCatalog.services | Where-Object { $_.id -eq $service.id -and $_.package }) | Select-Object -First 1
+              if (-not $previousService -or $previousService.version -eq $service.version) {
+                continue
+              }
+
+              $platformToken = if ($service.platform -eq "windows") { "win" } else { $service.platform }
+              $targetPackage = "artifacts/$($service.id)-$($service.version)-$platformToken-$($service.architecture).svcpkg"
+              if (-not (Test-Path $targetPackage -PathType Leaf)) {
+                continue
+              }
+
+              $previousPackageName = [IO.Path]::GetFileName(([uri]$previousService.package.url).AbsolutePath)
+              $previousPackage = "artifacts/previous-$($previous.tag_name)-$previousPackageName"
+              Invoke-WebRequest -Headers @{ "User-Agent" = "ExApp-Services-Release" } -Uri $previousService.package.url -OutFile $previousPackage
+              ./tools/package-service-delta.ps1 `
+                -BasePackagePath $previousPackage `
+                -TargetPackagePath $targetPackage
+            }
+          }
 
       - name: Generate release catalog
         shell: pwsh
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
           REPOSITORY: ${{ github.repository }}
+          SERVICE_CATALOG_SIGNING_PRIVATE_KEY_PEM: ${{ secrets.SERVICE_CATALOG_SIGNING_PRIVATE_KEY_PEM }}
+          SERVICE_CATALOG_SIGNING_PRIVATE_KEY_BASE64: ${{ secrets.SERVICE_CATALOG_SIGNING_PRIVATE_KEY_BASE64 }}
+          APP_UPDATE_SIGNING_PRIVATE_KEY_PEM: ${{ secrets.APP_UPDATE_SIGNING_PRIVATE_KEY_PEM }}
+          APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64: ${{ secrets.APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64 }}
+          SERVICE_CATALOG_SIGNING_KEY_ID: ${{ vars.SERVICE_CATALOG_SIGNING_KEY_ID }}
         run: |
           ./tools/generate-service-catalog.ps1 `
             -ReleaseTag $env:RELEASE_TAG `
             -Repository $env:REPOSITORY
+          $privateKeyPem = $env:SERVICE_CATALOG_SIGNING_PRIVATE_KEY_PEM
+          if ([string]::IsNullOrWhiteSpace($privateKeyPem) -and -not [string]::IsNullOrWhiteSpace($env:SERVICE_CATALOG_SIGNING_PRIVATE_KEY_BASE64)) {
+            $privateKeyPem = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:SERVICE_CATALOG_SIGNING_PRIVATE_KEY_BASE64))
+          }
+          if ([string]::IsNullOrWhiteSpace($privateKeyPem)) {
+            $privateKeyPem = $env:APP_UPDATE_SIGNING_PRIVATE_KEY_PEM
+          }
+          if ([string]::IsNullOrWhiteSpace($privateKeyPem) -and -not [string]::IsNullOrWhiteSpace($env:APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64)) {
+            $privateKeyPem = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64))
+          }
+          $keyId = if ($env:SERVICE_CATALOG_SIGNING_KEY_ID) { $env:SERVICE_CATALOG_SIGNING_KEY_ID } else { 'exapp-service-catalog-2026' }
+          ./tools/sign-app-update-manifest.ps1 `
+            -Path artifacts/services.stable.json `
+            -PrivateKeyPem $privateKeyPem `
+            -KeyId $keyId `
+            -RequireSignature
 
       - name: Validate release assets
         shell: pwsh
+        env:
+          SERVICE_CATALOG_SIGNING_PUBLIC_KEY_PEM: ${{ vars.SERVICE_CATALOG_SIGNING_PUBLIC_KEY_PEM }}
+          SERVICE_CATALOG_SIGNING_PUBLIC_KEY_BASE64: ${{ vars.SERVICE_CATALOG_SIGNING_PUBLIC_KEY_BASE64 }}
+          SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_PEM: ${{ vars.SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_PEM }}
+          SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_BASE64: ${{ vars.SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_BASE64 }}
+          REQUIRE_SERVICE_PACKAGE_SIGNATURE: ${{ vars.REQUIRE_SERVICE_PACKAGE_SIGNATURE }}
+          APP_UPDATE_SIGNING_PUBLIC_KEY_PEM: ${{ vars.APP_UPDATE_SIGNING_PUBLIC_KEY_PEM }}
+          APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64: ${{ vars.APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64 }}
         run: |
+          $publicKeyPem = $env:SERVICE_CATALOG_SIGNING_PUBLIC_KEY_PEM
+          if ([string]::IsNullOrWhiteSpace($publicKeyPem) -and -not [string]::IsNullOrWhiteSpace($env:SERVICE_CATALOG_SIGNING_PUBLIC_KEY_BASE64)) {
+            $publicKeyPem = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:SERVICE_CATALOG_SIGNING_PUBLIC_KEY_BASE64))
+          }
+          if ([string]::IsNullOrWhiteSpace($publicKeyPem)) {
+            $publicKeyPem = $env:APP_UPDATE_SIGNING_PUBLIC_KEY_PEM
+          }
+          if ([string]::IsNullOrWhiteSpace($publicKeyPem) -and -not [string]::IsNullOrWhiteSpace($env:APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64)) {
+            $publicKeyPem = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64))
+          }
+          $servicePackagePublicKeyPem = $env:SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_PEM
+          if ([string]::IsNullOrWhiteSpace($servicePackagePublicKeyPem) -and -not [string]::IsNullOrWhiteSpace($env:SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_BASE64)) {
+            $servicePackagePublicKeyPem = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_BASE64))
+          }
+          $requireServicePackageSignature = $env:REQUIRE_SERVICE_PACKAGE_SIGNATURE -eq 'true'
+          ./tools/verify-app-update-manifest.ps1 `
+            -Path artifacts/services.stable.json `
+            -PublicKeyPem $publicKeyPem
+          if (-not (Test-Json -Path artifacts/services.stable.json -SchemaFile schemas/service-catalog.schema.json)) {
+            throw "Service catalog does not match schemas/service-catalog.schema.json."
+          }
+
           $catalog = Get-Content -Raw "artifacts/services.stable.json" | ConvertFrom-Json -Depth 20
           $available = @($catalog.services | Where-Object { $_.status -eq "available" })
           if ($available.Count -eq 0) {
@@ -75,6 +204,31 @@ jobs:
             if ($actualHash -ne $expectedHash -or $actualHash -ne $service.package.sha256) {
               throw "Generated package '$packageName' does not match catalog metadata."
             }
+            ./tools/verify-service-package.ps1 `
+              -Path $package `
+              -PublicKeyPem $servicePackagePublicKeyPem `
+              -RequireSignature:$requireServicePackageSignature
+
+            $serviceDeltas = @()
+            if ($service.deltas) {
+              $serviceDeltas = @($service.deltas)
+            } elseif ($service.delta) {
+              $serviceDeltas = @($service.delta)
+            }
+
+            foreach ($delta in $serviceDeltas) {
+              $deltaName = [IO.Path]::GetFileName(([uri]$delta.url).AbsolutePath)
+              $deltaPackage = Join-Path "artifacts" $deltaName
+              $expectedDeltaHash = (Get-Content "$deltaPackage.sha256" -Raw).Trim()
+              $actualDeltaHash = (Get-FileHash -Algorithm SHA256 $deltaPackage).Hash.ToLowerInvariant()
+              if ($actualDeltaHash -ne $expectedDeltaHash -or $actualDeltaHash -ne $delta.sha256) {
+                throw "Generated delta '$deltaName' does not match catalog metadata."
+              }
+              ./tools/verify-service-package.ps1 `
+                -Path $deltaPackage `
+                -PublicKeyPem $servicePackagePublicKeyPem `
+                -RequireSignature:$requireServicePackageSignature
+            }
           }
 
       - name: Upload release assets
@@ -85,6 +239,9 @@ jobs:
             artifacts/*.svcpkg
             artifacts/*.svcpkg.sha256
             artifacts/*.svcpkg.size
+            artifacts/*.svcdelta
+            artifacts/*.svcdelta.sha256
+            artifacts/*.svcdelta.size
             artifacts/services.stable.json
             schemas/service-catalog.schema.json
         env:

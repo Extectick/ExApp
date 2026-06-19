@@ -36,6 +36,20 @@ public partial class App : Application
 
         try
         {
+            if (await ApplicationUpdateService.Current.TryRecoverInterruptedUpdateAsync())
+            {
+                AppLogger.Info("Interrupted update recovery launched.");
+                Environment.Exit(0);
+                return;
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error("Interrupted update recovery failed to launch", exception);
+        }
+
+        try
+        {
             await _agentProcessManager.EnsureRunningAsync();
             AppLogger.Info("Agent connection established.");
         }

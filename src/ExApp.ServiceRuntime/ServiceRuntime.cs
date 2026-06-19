@@ -76,6 +76,23 @@ public sealed class ServiceRuntime(
         return Task.CompletedTask;
     }
 
+    public async Task<ServiceCommandResult> ExecuteAsync(
+        string serviceId,
+        string command,
+        IReadOnlyList<string>? arguments = null,
+        CancellationToken cancellationToken = default)
+    {
+        var service = registry.Require(serviceId);
+        if (service.ExecutablePath is null)
+        {
+            throw new ServiceRuntimeException("service.executableMissing", $"Service executable for '{service.ServiceId}' was not found.");
+        }
+
+        var result = await commands.ExecuteAsync(service, command, arguments, cancellationToken);
+        EnsureSuccess(result);
+        return result;
+    }
+
     public async Task PrepareForUninstallAsync(
         string serviceId,
         CancellationToken cancellationToken = default)

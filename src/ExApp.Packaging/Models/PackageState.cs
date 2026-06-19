@@ -30,4 +30,42 @@ public sealed record PackageInstallResult(
     ServiceManifest Manifest,
     PackageState State,
     string InstallDirectory,
-    bool AlreadyInstalled);
+    bool AlreadyInstalled)
+{
+    public bool AppliedDelta { get; init; }
+    public int CopiedFiles { get; init; }
+    public int LinkedFiles { get; init; }
+    public int DeletedFiles { get; init; }
+}
+
+public sealed record ServiceDeltaManifest
+{
+    public int ManifestVersion { get; init; }
+    public string ServiceId { get; init; } = string.Empty;
+    public string BaseVersion { get; init; } = string.Empty;
+    public string Version { get; init; } = string.Empty;
+    public DateTimeOffset GeneratedAt { get; init; }
+    public IReadOnlyList<ChecksumEntry> Files { get; init; } = [];
+    public IReadOnlyList<FilePatchEntry> Patches { get; init; } = [];
+    public IReadOnlyList<string> Delete { get; init; } = [];
+}
+
+public sealed record FilePatchEntry
+{
+    public string Path { get; init; } = string.Empty;
+    public int BlockSize { get; init; }
+    public long BaseSize { get; init; }
+    public string BaseSha256 { get; init; } = string.Empty;
+    public long TargetSize { get; init; }
+    public string TargetSha256 { get; init; } = string.Empty;
+    public string DataPath { get; init; } = string.Empty;
+    public IReadOnlyList<FilePatchOperation> Operations { get; init; } = [];
+}
+
+public sealed record FilePatchOperation
+{
+    public string Type { get; init; } = string.Empty;
+    public long Offset { get; init; }
+    public long DataOffset { get; init; }
+    public int Length { get; init; }
+}

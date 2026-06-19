@@ -4,6 +4,14 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AppUpdateSigningPublicKeyPem Condition="'$(AppUpdateSigningPublicKeyPem)' == ''"></AppUpdateSigningPublicKeyPem>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(AppUpdateSigningPublicKeyPem)' != ''">
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>ExAppUpdateSigningPublicKeyPem</_Parameter1>
+      <_Parameter2>$(AppUpdateSigningPublicKeyPem)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
 
 </Project>

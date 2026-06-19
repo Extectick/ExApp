@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using ExApp.Packaging.Models;
 
@@ -6,6 +8,11 @@ namespace ExApp.Packaging;
 
 internal sealed partial class PackageValidator(PackageManagerOptions options)
 {
+    private const string ServicePackageSignatureAlgorithm = "ecdsa-p256-sha256";
+    private const string ServicePackagePublicKeyEnvironmentVariable = "EXAPP_SERVICE_PACKAGE_PUBLIC_KEY_PEM";
+    private const string ServicePackagePublicKeyBase64EnvironmentVariable = "EXAPP_SERVICE_PACKAGE_PUBLIC_KEY_BASE64";
+    private const string AllowUnsignedEnvironmentVariable = "EXAPP_ALLOW_UNSIGNED_SERVICE_PACKAGES";
+
     private static readonly HashSet<string> SupportedPermissions = new(StringComparer.Ordinal)
     {
         "network",
@@ -91,11 +98,58 @@ internal sealed partial class PackageValidator(PackageManagerOptions options)
         Require(uncheckedFile is null, "checksums.fileNotListed", $"Package file '{uncheckedFile}' is not listed in checksums.json.");
     }
 
-    public void ValidateSignaturePlaceholder(string packageDirectory)
+    public void ValidateSignature(string packageDirectory)
     {
         var signaturePath = Path.Combine(packageDirectory, "signature.sig");
         Require(File.Exists(signaturePath), "signature.missing", "signature.sig is missing.");
         Require(new FileInfo(signaturePath).Length > 0, "signature.empty", "signature.sig is empty.");
+
+        var publicKeyPem = ResolvePublicKeyPem();
+        var signatureText = File.ReadAllText(signaturePath);
+        if (IsDevelopmentPlaceholder(signatureText))
+        {
+            if (!string.IsNullOrWhiteSpace(publicKeyPem) && !AllowUnsignedForDevelopment())
+            {
+                throw new PackageException("signature.unsigned", "Service package is not signed.");
+            }
+
+            return;
+        }
+
+        ServicePackageSignature signature;
+        try
+        {
+            signature = JsonSerializer.Deserialize<ServicePackageSignature>(signatureText, PackageJson.Options)
+                ?? throw new JsonException();
+        }
+        catch (JsonException exception)
+        {
+            throw new PackageException("signature.invalidJson", "signature.sig contains invalid JSON.", exception);
+        }
+
+        Require(signature.Algorithm.Equals(ServicePackageSignatureAlgorithm, StringComparison.OrdinalIgnoreCase), "signature.unsupportedAlgorithm", "Service package signature algorithm is not supported.");
+        Require(!string.IsNullOrWhiteSpace(signature.KeyId), "signature.keyMissing", "Service package signature key id is missing.");
+        Require(signature.SignedFile.Equals("checksums.json", StringComparison.OrdinalIgnoreCase), "signature.unsupportedPayload", "Service package signature must sign checksums.json.");
+        Require(!string.IsNullOrWhiteSpace(signature.Value), "signature.valueMissing", "Service package signature value is missing.");
+        Require(!string.IsNullOrWhiteSpace(publicKeyPem), "signature.publicKeyMissing", "Service package signing public key is not configured.");
+
+        var checksumsPath = Path.Combine(packageDirectory, "checksums.json");
+        Require(File.Exists(checksumsPath), "checksums.missing", "checksums.json is missing.");
+
+        byte[] signatureBytes;
+        try
+        {
+            signatureBytes = Convert.FromBase64String(signature.Value);
+        }
+        catch (FormatException exception)
+        {
+            throw new PackageException("signature.invalidValue", "Service package signature value is not valid Base64.", exception);
+        }
+
+        using var ecdsa = ECDsa.Create();
+        ecdsa.ImportFromPem(publicKeyPem);
+        var payload = File.ReadAllBytes(checksumsPath);
+        Require(ecdsa.VerifyData(payload, signatureBytes, HashAlgorithmName.SHA256), "signature.verificationFailed", "Service package signature verification failed.");
     }
 
     public static string ResolvePackagePath(string packageDirectory, string relativePath)
@@ -137,6 +191,46 @@ internal sealed partial class PackageValidator(PackageManagerOptions options)
             throw new PackageException(code, message);
         }
     }
+
+    private string? ResolvePublicKeyPem() =>
+        NormalizePem(options.ServicePackageSigningPublicKeyPem)
+        ?? ResolvePemEnvironment(ServicePackagePublicKeyEnvironmentVariable, ServicePackagePublicKeyBase64EnvironmentVariable);
+
+    private static string? ResolvePemEnvironment(string pemName, string base64Name)
+    {
+        var pem = Environment.GetEnvironmentVariable(pemName);
+        if (!string.IsNullOrWhiteSpace(pem))
+        {
+            return NormalizePem(pem);
+        }
+
+        var base64 = Environment.GetEnvironmentVariable(base64Name);
+        return string.IsNullOrWhiteSpace(base64)
+            ? null
+            : Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+    }
+
+    private static string? NormalizePem(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? null
+            : value.Replace("\\n", Environment.NewLine, StringComparison.Ordinal);
+
+    private static bool IsDevelopmentPlaceholder(string value) =>
+        value.Trim().Equals("dev-placeholder", StringComparison.OrdinalIgnoreCase) ||
+        value.Trim().Equals("test-placeholder", StringComparison.OrdinalIgnoreCase) ||
+        value.Trim().Equals("integration-test", StringComparison.OrdinalIgnoreCase);
+
+    private static bool AllowUnsignedForDevelopment() =>
+        string.Equals(
+            Environment.GetEnvironmentVariable(AllowUnsignedEnvironmentVariable),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+
+    private sealed record ServicePackageSignature(
+        string Algorithm,
+        string KeyId,
+        string SignedFile,
+        string Value);
 
     [GeneratedRegex("^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.CultureInvariant)]
     private static partial Regex ServiceIdRegex();

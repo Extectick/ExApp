@@ -439,8 +439,8 @@ public sealed partial class ServicesPage : Page, ILocalizedPage
         {
             await _operations.RunAsync(serviceId, ServiceOperationKind.Update, async cancellationToken =>
             {
-                var package = await _catalogClient.ResolvePackageAsync(catalogItem, cancellationToken);
-                await _serviceClient.UpdateAsync(package.PackagePath, package.Sha256);
+                var package = await _catalogClient.ResolvePackageAsync(catalogItem, selected.Version, cancellationToken);
+                await _serviceClient.UpdateAsync(package.PackagePath, package.Sha256, package.IsDelta);
                 ServiceChangeNotifier.NotifyChanged();
                 await LoadCatalogAsync();
                 await RefreshAsync(includeLogs: _selectedServiceId == serviceId);
