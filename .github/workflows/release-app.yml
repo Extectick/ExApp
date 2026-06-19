@@ -122,14 +122,15 @@ jobs:
         shell: pwsh
         run: |
           $deltaPackage = Get-ChildItem artifacts/app -Filter 'exapp-delta-*-to-${{ steps.release.outputs.assembly_version }}-win-x64.zip' -ErrorAction SilentlyContinue | Select-Object -First 1
-          $arguments = @(
-            "-Version", "${{ steps.release.outputs.assembly_version }}",
-            "-ReleaseTag", "${{ steps.release.outputs.tag }}",
-            "-Repository", "${{ github.repository }}",
-            "-Channel", "${{ steps.release.outputs.channel }}"
-          )
+          $arguments = @{
+            Version = "${{ steps.release.outputs.assembly_version }}"
+            ReleaseTag = "${{ steps.release.outputs.tag }}"
+            Repository = "${{ github.repository }}"
+            Channel = "${{ steps.release.outputs.channel }}"
+          }
           if ($deltaPackage) {
-            $arguments += @("-DeltaPackagePath", $deltaPackage.FullName, "-DeltaBaseVersion", "${{ steps.previous_app.outputs.version }}")
+            $arguments.DeltaPackagePath = $deltaPackage.FullName
+            $arguments.DeltaBaseVersion = "${{ steps.previous_app.outputs.version }}"
           }
           ./tools/generate-app-update-manifest.ps1 @arguments
 
