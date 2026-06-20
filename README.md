@@ -40,9 +40,13 @@ The MSI installs ExApp into `%LocalAppData%\Programs\ExApp`, creates a Start Men
 - `exapp-update.json`
 
 Application updates prefer the delta ZIP when the installed version matches the
-delta `baseVersion`. The delta package contains only changed/new files plus
-deletion metadata; unchanged installed files are not rewritten. If no matching
-delta exists, ExApp falls back to the full ZIP.
+delta `baseVersion` and the delta is smaller than the full ZIP. The delta
+package contains changed/new files, deletion metadata, and `copy/data` patch
+operations for fragment-level reconstruction of changed files. Unchanged
+installed files are not rewritten. If no matching useful delta exists, or if the
+local base is corrupted, ExApp falls back to the full ZIP. Update ZIP payloads
+are extracted through a safe extractor that rejects path traversal, duplicate
+entries, and oversized expanded payloads.
 
 For production code signing, configure GitHub:
 

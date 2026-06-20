@@ -1,6 +1,6 @@
 # 00 — Текущий статус проекта
 
-Дата: **2026-06-19**
+Дата: **2026-06-20**
 
 ## Глобальный статус
 
@@ -18,12 +18,15 @@
 - [x] DONE — добавлен MSI installer для первичной установки ExApp
 - [x] DONE — добавлены delta updates для приложения по измененным файлам
 - [x] DONE — подключены независимые обновления сервисов через service catalog
+- [x] DONE — app/service release pipelines проверяют delta-пакеты перед публикацией
+- [x] DONE — update pipeline fail-closed для production signing
 
 ## Сейчас выполняется
 
 - [ ] DOING — реализовать первый VPN service со статической конфигурацией
 - [ ] REVIEW — проверить публикацию service package через GitHub Releases
 - [ ] REVIEW — опубликовать следующий `app-v*` release и проверить delta update между двумя опубликованными версиями
+- [ ] BLOCKED — production signing readiness ожидает реальные GitHub secrets/vars и доверенный code-signing `.pfx`
 
 ## Следующий лучший шаг
 
@@ -50,4 +53,4 @@
 | MVP 4 | REVIEW | GitHub service catalog |
 | MVP 5 | DOING | VPN service без подписок |
 | MVP 6 | TODO | VPN subscription URL |
-| MVP 7 | REVIEW | installer, signing hooks, full/delta app updates и service updates реализованы; требуется проверка публичного app release |
+| MVP 7 | REVIEW | installer, fail-closed signing gates, full/delta app updates и service updates реализованы; требуется настройка production secrets и проверка публичного app release |
