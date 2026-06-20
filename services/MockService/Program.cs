@@ -4,6 +4,8 @@ using System.Text.Json;
 const string ServiceId = "mock-service";
 const string Version = "0.1.0";
 const int MaxLogLines = 300;
+const int FileRetryCount = 8;
+const int FileRetryDelayMs = 50;
 
 var command = args.FirstOrDefault()?.ToLowerInvariant() ?? "status";
 var stateRoot = GetOption(args, "--state")
@@ -59,7 +61,7 @@ static int StartService(string[] args, string stateRoot, string statePath, strin
         return WriteError("Failed to start mock service process.");
     }
 
-    File.WriteAllText(pidPath, process.Id.ToString());
+    WriteAllTextAtomically(pidPath, process.Id.ToString());
     AppendLog(logPath, $"Started mock service process {process.Id}.");
     WriteJson(ReadState(statePath));
     return 0;
@@ -67,7 +69,7 @@ static int StartService(string[] args, string stateRoot, string statePath, strin
 
 static async Task<int> RunServiceAsync(string statePath, string pidPath, string logPath)
 {
-    File.WriteAllText(pidPath, Environment.ProcessId.ToString());
+    WriteAllTextAtomically(pidPath, Environment.ProcessId.ToString());
     WriteState(statePath, "starting", "starting", "Mock service is starting.", null);
     AppendLog(logPath, "Startup sequence started.");
 
@@ -179,7 +181,7 @@ static string? GetOption(string[] args, string name)
 
 static int? ReadPid(string pidPath)
 {
-    if (!File.Exists(pidPath) || !int.TryParse(File.ReadAllText(pidPath).Trim(), out var pid))
+    if (!File.Exists(pidPath) || !int.TryParse(ReadAllTextWithRetry(pidPath).Trim(), out var pid))
     {
         return null;
     }
@@ -207,7 +209,7 @@ static ServiceStatus ReadState(string statePath)
         return new ServiceStatus(ServiceId, Version, "stopped", "stopped", "Mock service is stopped.", null, DateTimeOffset.UtcNow);
     }
 
-    return JsonSerializer.Deserialize<ServiceStatus>(File.ReadAllText(statePath))
+    return JsonSerializer.Deserialize<ServiceStatus>(ReadAllTextWithRetry(statePath))
         ?? new ServiceStatus(ServiceId, Version, "stopped", "stopped", "Mock service is stopped.", null, DateTimeOffset.UtcNow);
 }
 
@@ -225,7 +227,7 @@ static void WriteJson(ServiceStatus status, string? path = null)
     }
     else
     {
-        File.WriteAllText(path, json);
+        WriteAllTextAtomically(path, json);
     }
 }
 
@@ -249,6 +251,67 @@ static void AppendLog(string logPath, string message)
         catch (IOException) when (attempt < 4)
         {
             Thread.Sleep(50);
+        }
+    }
+}
+
+static string ReadAllTextWithRetry(string path)
+{
+    for (var attempt = 0; attempt < FileRetryCount; attempt++)
+    {
+        try
+        {
+            using var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+        catch (IOException) when (attempt < FileRetryCount - 1)
+        {
+            Thread.Sleep(FileRetryDelayMs);
+        }
+    }
+
+    using var finalStream = new FileStream(
+        path,
+        FileMode.Open,
+        FileAccess.Read,
+        FileShare.ReadWrite | FileShare.Delete);
+    using var finalReader = new StreamReader(finalStream);
+    return finalReader.ReadToEnd();
+}
+
+static void WriteAllTextAtomically(string path, string content)
+{
+    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+    var temporaryPath = $"{path}.{Guid.NewGuid():N}.tmp";
+    try
+    {
+        for (var attempt = 0; attempt < FileRetryCount; attempt++)
+        {
+            try
+            {
+                File.WriteAllText(temporaryPath, content);
+                File.Move(temporaryPath, path, overwrite: true);
+                return;
+            }
+            catch (IOException) when (attempt < FileRetryCount - 1)
+            {
+                Thread.Sleep(FileRetryDelayMs);
+            }
+        }
+
+        File.WriteAllText(temporaryPath, content);
+        File.Move(temporaryPath, path, overwrite: true);
+    }
+    finally
+    {
+        if (File.Exists(temporaryPath))
+        {
+            File.Delete(temporaryPath);
         }
     }
 }
