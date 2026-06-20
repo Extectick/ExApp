@@ -39,9 +39,16 @@ public static class DeltaPatchHelper
             return null;
         }
 
-        var baseBytes = File.ReadAllBytes(basePath);
-        var targetBytes = File.ReadAllBytes(targetPath);
-        if (targetBytes.Length < MaxChunkSize * 2 || baseBytes.Length == 0)
+        var baseInfo = new FileInfo(basePath);
+        var targetInfo = new FileInfo(targetPath);
+        if (targetInfo.Length < MaxChunkSize * 2 || baseInfo.Length == 0)
+        {
+            return null;
+        }
+
+        var baseSha256 = Sha256Hex(basePath);
+        var baseChunks = BuildChunkIndex(basePath);
+        if (baseChunks.Count == 0)
         {
             return null;
         }
@@ -50,88 +57,39 @@ public static class DeltaPatchHelper
         var operations = new List<PatchOperationDto>();
         long dataOffset = 0;
         var copiedBytes = 0L;
+        using (var targetStream = File.OpenRead(targetPath))
+        using (var baseStream = File.OpenRead(basePath))
         using (var dataStream = File.Create(dataPath))
         {
-            var prefixLength = CommonPrefixLength(baseBytes, targetBytes);
-            var suffixLength = CommonSuffixLength(baseBytes, targetBytes, prefixLength);
-            if (prefixLength > 0)
+            foreach (var targetChunk in EnumerateChunks(targetStream))
             {
-                AddOperation(operations, "copy", 0, 0, prefixLength);
-                copiedBytes += prefixLength;
-            }
-
-            var baseMiddleOffset = prefixLength;
-            var baseMiddleLength = baseBytes.Length - prefixLength - suffixLength;
-            var targetMiddleOffset = prefixLength;
-            var targetMiddleLength = targetBytes.Length - prefixLength - suffixLength;
-
-            if (targetMiddleLength > 0)
-            {
-                if (baseMiddleLength >= MinChunkSize && targetMiddleLength >= MinChunkSize)
+                var key = GetChunkKey(targetChunk.Hash, targetChunk.Length);
+                if (baseChunks.TryGetValue(key, out var queue) &&
+                    TryDequeueMatchingChunk(queue, baseStream, targetChunk.Bytes, targetChunk.Length, out var baseChunk))
                 {
-                    var baseChunks = Chunk(baseBytes, baseMiddleOffset, baseMiddleLength);
-                    var targetChunks = Chunk(targetBytes, targetMiddleOffset, targetMiddleLength);
-                    var chunkMap = new Dictionary<string, Queue<ChunkInfo>>(StringComparer.Ordinal);
-                    foreach (var chunk in baseChunks)
-                    {
-                        var key = $"{chunk.Hash}|{chunk.Length}";
-                        if (!chunkMap.TryGetValue(key, out var queue))
-                        {
-                            queue = new Queue<ChunkInfo>();
-                            chunkMap[key] = queue;
-                        }
-
-                        queue.Enqueue(chunk);
-                    }
-
-                    foreach (var targetChunk in targetChunks)
-                    {
-                        var key = $"{targetChunk.Hash}|{targetChunk.Length}";
-                        if (chunkMap.TryGetValue(key, out var queue) &&
-                            TryDequeueMatchingChunk(queue, baseBytes, targetBytes, targetChunk, out var baseChunk))
-                        {
-                            AddOperation(
-                                operations,
-                                "copy",
-                                baseChunk.Offset,
-                                0,
-                                targetChunk.Length);
-                            copiedBytes += targetChunk.Length;
-                            continue;
-                        }
-
-                        dataStream.Write(targetBytes, targetChunk.Offset, targetChunk.Length);
-                        AddOperation(
-                            operations,
-                            "data",
-                            0,
-                            dataOffset,
-                            targetChunk.Length);
-                        dataOffset += targetChunk.Length;
-                    }
-                }
-                else
-                {
-                    dataStream.Write(targetBytes, targetMiddleOffset, targetMiddleLength);
                     AddOperation(
                         operations,
-                        "data",
+                        "copy",
+                        baseChunk.Offset,
                         0,
-                        dataOffset,
-                        targetMiddleLength);
-                    dataOffset += targetMiddleLength;
+                        targetChunk.Length);
+                    copiedBytes += targetChunk.Length;
+                    continue;
                 }
-            }
 
-            if (suffixLength > 0)
-            {
-                AddOperation(operations, "copy", baseBytes.Length - suffixLength, 0, suffixLength);
-                copiedBytes += suffixLength;
+                dataStream.Write(targetChunk.Bytes, 0, targetChunk.Length);
+                AddOperation(
+                    operations,
+                    "data",
+                    0,
+                    dataOffset,
+                    targetChunk.Length);
+                dataOffset += targetChunk.Length;
             }
         }
 
         var estimatedPatchSize = dataOffset + operations.Count * 96L;
-        var maximumUsefulPatchSize = (long)(targetBytes.LongLength * maxPatchRatio);
+        var maximumUsefulPatchSize = (long)(targetInfo.Length * maxPatchRatio);
         if (copiedBytes == 0 ||
             operations.Count == 0 ||
             estimatedPatchSize >= maximumUsefulPatchSize)
@@ -144,9 +102,9 @@ public static class DeltaPatchHelper
         {
             Path = relativePath,
             BlockSize = AverageChunkSize,
-            BaseSize = baseBytes.LongLength,
-            BaseSha256 = Sha256Hex(baseBytes),
-            TargetSize = targetBytes.LongLength,
+            BaseSize = baseInfo.Length,
+            BaseSha256 = baseSha256,
+            TargetSize = targetInfo.Length,
             TargetSha256 = targetSha256,
             DataPath = dataRelativePath.Replace('\\', '/'),
             Operations = operations
@@ -155,76 +113,87 @@ public static class DeltaPatchHelper
         return JsonSerializer.Serialize(patch);
     }
 
-    private static int CommonPrefixLength(byte[] baseBytes, byte[] targetBytes)
+    private static Dictionary<string, Queue<ChunkInfo>> BuildChunkIndex(string path)
     {
-        var length = Math.Min(baseBytes.Length, targetBytes.Length);
-        var index = 0;
-        while (index < length && baseBytes[index] == targetBytes[index])
+        var chunks = new Dictionary<string, Queue<ChunkInfo>>(StringComparer.Ordinal);
+        using var stream = File.OpenRead(path);
+        foreach (var chunk in EnumerateChunks(stream))
         {
-            index++;
-        }
-
-        return index;
-    }
-
-    private static int CommonSuffixLength(byte[] baseBytes, byte[] targetBytes, int prefixLength)
-    {
-        var maxLength = Math.Min(baseBytes.Length, targetBytes.Length) - prefixLength;
-        var length = 0;
-        while (length < maxLength &&
-               baseBytes[baseBytes.Length - length - 1] == targetBytes[targetBytes.Length - length - 1])
-        {
-            length++;
-        }
-
-        return length;
-    }
-
-    private static List<ChunkInfo> Chunk(byte[] bytes, int start, int count)
-    {
-        var chunks = new List<ChunkInfo>();
-        var chunkStart = start;
-        var hash = 0UL;
-        var end = start + count;
-        for (var index = start; index < end; index++)
-        {
-            hash = (hash << 1) + Gear[bytes[index]];
-            var length = index - chunkStart + 1;
-            if (length < MinChunkSize)
+            var key = GetChunkKey(chunk.Hash, chunk.Length);
+            if (!chunks.TryGetValue(key, out var queue))
             {
-                continue;
+                queue = new Queue<ChunkInfo>();
+                chunks[key] = queue;
             }
 
-            if ((hash & BoundaryMask) != 0 && length < MaxChunkSize)
-            {
-                continue;
-            }
-
-            chunks.Add(new ChunkInfo(chunkStart, length, Sha256Hex(bytes, chunkStart, length)));
-            chunkStart = index + 1;
-            hash = 0;
-        }
-
-        if (chunkStart < end)
-        {
-            chunks.Add(new ChunkInfo(chunkStart, end - chunkStart, Sha256Hex(bytes, chunkStart, end - chunkStart)));
+            queue.Enqueue(new ChunkInfo(chunk.Offset, chunk.Length, chunk.Hash));
         }
 
         return chunks;
     }
 
+    private static IEnumerable<ChunkBytes> EnumerateChunks(Stream stream)
+    {
+        var readBuffer = new byte[81920];
+        var chunkBuffer = new byte[MaxChunkSize];
+        var chunkStart = 0L;
+        var streamOffset = 0L;
+        var chunkLength = 0;
+        var hash = 0UL;
+        int bytesRead;
+        while ((bytesRead = stream.Read(readBuffer, 0, readBuffer.Length)) > 0)
+        {
+            for (var index = 0; index < bytesRead; index++)
+            {
+                var value = readBuffer[index];
+                chunkBuffer[chunkLength++] = value;
+                hash = (hash << 1) + Gear[value];
+                streamOffset++;
+
+                if (chunkLength < MinChunkSize &&
+                    chunkLength < MaxChunkSize)
+                {
+                    continue;
+                }
+
+                if ((hash & BoundaryMask) != 0 &&
+                    chunkLength < MaxChunkSize)
+                {
+                    continue;
+                }
+
+                yield return CreateChunkBytes(chunkStart, chunkBuffer, chunkLength);
+                chunkStart = streamOffset;
+                chunkLength = 0;
+                hash = 0;
+            }
+        }
+
+        if (chunkLength > 0)
+        {
+            yield return CreateChunkBytes(chunkStart, chunkBuffer, chunkLength);
+        }
+    }
+
     private static bool TryDequeueMatchingChunk(
         Queue<ChunkInfo> queue,
-        byte[] baseBytes,
+        FileStream baseStream,
         byte[] targetBytes,
-        ChunkInfo targetChunk,
+        int targetLength,
         out ChunkInfo baseChunk)
     {
+        var candidateBuffer = new byte[targetLength];
         while (queue.Count > 0)
         {
             var candidate = queue.Dequeue();
-            if (candidate.Length == targetChunk.Length &&
-                baseBytes.AsSpan(candidate.Offset, candidate.Length).SequenceEqual(targetBytes.AsSpan(targetChunk.Offset, targetChunk.Length)))
+            if (candidate.Length != targetLength)
+            {
+                continue;
+            }
+
+            baseStream.Seek(candidate.Offset, SeekOrigin.Begin);
+            baseStream.ReadExactly(candidateBuffer.AsSpan(0, targetLength));
+            if (candidateBuffer.AsSpan(0, targetLength).SequenceEqual(targetBytes.AsSpan(0, targetLength)))
             {
                 baseChunk = candidate;
                 return true;
@@ -234,6 +203,15 @@ public static class DeltaPatchHelper
         baseChunk = default;
         return false;
     }
+
+    private static ChunkBytes CreateChunkBytes(long offset, byte[] buffer, int length)
+    {
+        var bytes = new byte[length];
+        Buffer.BlockCopy(buffer, 0, bytes, 0, length);
+        return new ChunkBytes(offset, length, Sha256Hex(bytes), bytes);
+    }
+
+    private static string GetChunkKey(string hash, int length) => $"{hash}|{length}";
 
     private static void AddOperation(
         List<PatchOperationDto> operations,
@@ -271,14 +249,15 @@ public static class DeltaPatchHelper
         });
     }
 
+    private static string Sha256Hex(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
+
     private static string Sha256Hex(byte[] bytes)
     {
         return Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-    }
-
-    private static string Sha256Hex(byte[] bytes, int offset, int length)
-    {
-        return Convert.ToHexString(SHA256.HashData(bytes.AsSpan(offset, length))).ToLowerInvariant();
     }
 
     private static ulong[] BuildGearTable()
@@ -302,7 +281,9 @@ public static class DeltaPatchHelper
         return value ^ (value >> 31);
     }
 
-    private readonly record struct ChunkInfo(int Offset, int Length, string Hash);
+    private readonly record struct ChunkInfo(long Offset, int Length, string Hash);
+
+    private readonly record struct ChunkBytes(long Offset, int Length, string Hash, byte[] Bytes);
 
     private sealed class PatchDto
     {

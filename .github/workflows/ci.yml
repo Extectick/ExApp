@@ -38,6 +38,10 @@ jobs:
           dotnet test tests/ExApp.Packaging.Tests/ExApp.Packaging.Tests.csproj --configuration Debug --no-build
           dotnet test tests/ExApp.Ipc.Tests/ExApp.Ipc.Tests.csproj --configuration Debug --no-build
 
+      - name: Delta patch helper smoke
+        shell: pwsh
+        run: ./tools/test-delta-patch-helper.ps1
+
       - name: App update e2e smoke
         shell: pwsh
         run: |
