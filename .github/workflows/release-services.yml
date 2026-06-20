@@ -53,31 +53,7 @@ jobs:
           APP_UPDATE_SIGNING_PUBLIC_KEY_PEM: ${{ vars.APP_UPDATE_SIGNING_PUBLIC_KEY_PEM }}
           APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64: ${{ vars.APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64 }}
         run: |
-          function Has-Value([string[]]$values) {
-            foreach ($value in $values) {
-              if (-not [string]::IsNullOrWhiteSpace($value)) {
-                return $true
-              }
-            }
-
-            return $false
-          }
-
-          if ($env:REQUIRE_SERVICE_PACKAGE_SIGNATURE -ne 'true') {
-            throw "REQUIRE_SERVICE_PACKAGE_SIGNATURE repository variable must be true for service releases."
-          }
-          if (-not (Has-Value @($env:SERVICE_PACKAGE_SIGNING_PRIVATE_KEY_PEM, $env:SERVICE_PACKAGE_SIGNING_PRIVATE_KEY_BASE64))) {
-            throw "SERVICE_PACKAGE_SIGNING_PRIVATE_KEY_PEM or SERVICE_PACKAGE_SIGNING_PRIVATE_KEY_BASE64 repository secret is required."
-          }
-          if (-not (Has-Value @($env:SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_PEM, $env:SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_BASE64))) {
-            throw "SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_PEM or SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_BASE64 repository variable is required."
-          }
-          if (-not (Has-Value @($env:SERVICE_CATALOG_SIGNING_PRIVATE_KEY_PEM, $env:SERVICE_CATALOG_SIGNING_PRIVATE_KEY_BASE64, $env:APP_UPDATE_SIGNING_PRIVATE_KEY_PEM, $env:APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64))) {
-            throw "SERVICE_CATALOG_SIGNING_PRIVATE_KEY_* or APP_UPDATE_SIGNING_PRIVATE_KEY_* repository secret is required."
-          }
-          if (-not (Has-Value @($env:SERVICE_CATALOG_SIGNING_PUBLIC_KEY_PEM, $env:SERVICE_CATALOG_SIGNING_PUBLIC_KEY_BASE64, $env:APP_UPDATE_SIGNING_PUBLIC_KEY_PEM, $env:APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64))) {
-            throw "SERVICE_CATALOG_SIGNING_PUBLIC_KEY_* or APP_UPDATE_SIGNING_PUBLIC_KEY_* repository variable is required."
-          }
+          ./tools/check-release-readiness.ps1 -Production -Scope services -EnvironmentOnly
 
       - name: Build service packages
         shell: pwsh

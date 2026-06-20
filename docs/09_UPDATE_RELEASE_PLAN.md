@@ -99,6 +99,8 @@ Preflight перед production release:
 
 ```powershell
 .\tools\check-release-readiness.ps1 -Production
+.\tools\check-release-readiness.ps1 -Production -Scope app
+.\tools\check-release-readiness.ps1 -Production -Scope services
 ```
 
 Скрипт проверяет наличие GitHub secrets/vars через `gh`, а если GitHub CLI
