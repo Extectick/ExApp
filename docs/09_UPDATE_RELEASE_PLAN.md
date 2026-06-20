@@ -17,10 +17,11 @@ Level 3: Service Catalog
 Реализован собственный внешний `ExApp.Updater` + GitHub Releases. Desktop и Agent
 поставляются как полный ZIP и как delta ZIP между предыдущим и новым app release.
 Клиент выбирает delta ZIP, если установленная версия совпадает с `baseVersion`.
-Delta содержит измененные/новые файлы, список удалений и patch-операции
-`copy/data` для фрагментной пересборки измененных файлов. Updater применяет
-файловый manifest, заменяет только нужные файлы, не трогает неизмененные, делает
-backup затронутых файлов и откатывает их при неуспешном старте новой версии.
+Delta используется только если она меньше полного пакета. Delta содержит
+измененные/новые файлы, список удалений и patch-операции `copy/data` для
+фрагментной пересборки измененных файлов. Updater применяет файловый manifest,
+заменяет только нужные файлы, не трогает неизмененные, делает backup затронутых
+файлов и откатывает их при неуспешном старте новой версии.
 Генерация patch payload использует потоковую chunk-индексацию, поэтому крупные
 бинарники не загружаются целиком в память при сборке release.
 Если delta не применима из-за поврежденной локальной базы или несовпадения hash,
@@ -28,6 +29,9 @@ updater автоматически переключается на full package 
 скачивается заранее для каждого delta update: Desktop передает updater-у URL,
 размер и SHA-256 полного пакета, а updater скачивает и проверяет его только если
 delta реально не применима.
+ZIP update payload распаковывается через общий secure extractor: path traversal,
+дублирующиеся entries и слишком большие распакованные payload отклоняются до
+применения update; частичный staging удаляется при ошибке распаковки.
 Для первичной установки выпускается per-user MSI installer с тем же payload.
 Установка идет в `%LocalAppData%\Programs\ExApp`, чтобы updater мог менять файлы
 без прав администратора.
@@ -65,6 +69,8 @@ flowchart TD
 - [x] DONE — fallback delta -> full package при поврежденной локальной базе
 - [x] DONE — CI smoke для delta update и delta fallback
 - [x] DONE — release gate применяет каждый app delta к предыдущему full package
+- [x] DONE — пропускать delta, если она не меньше full package
+- [x] DONE — безопасно распаковывать app update ZIP payload
 
 ## Installer and signing
 
@@ -112,6 +118,9 @@ delta к соответствующему предыдущему full package д
 проходит проверку, workflow удаляет этот delta-артефакт и продолжает выпуск full
 package. Это защищает от публикации delta, который совпал по SHA/metadata, но
 фактически не устанавливается.
+Если delta валидна, но по размеру не меньше full package, workflow тоже удаляет
+ее из artifacts и не добавляет в manifest/catalog, чтобы клиент не скачивал
+невыгодный update.
 
 Сгенерировать signing keys для GitHub secrets/vars:
 
@@ -183,6 +192,7 @@ flowchart TD
 - [x] DONE — fallback delta -> full package при `delta.*` ошибках
 - [x] DONE — CI smoke для service delta update
 - [x] DONE — release gate применяет каждый service delta к предыдущему full package
+- [x] DONE — пропускать service delta, если она не меньше full package
 
 ## Channels
 
@@ -231,8 +241,8 @@ Catalog: 1
 - [ ] TODO — каждый service release имеет changelog
 - [ ] TODO — нельзя перезаписывать опубликованные версии
 - [ ] TODO — нельзя менять package без изменения version
-- [ ] TODO — нельзя публиковать package без sha256
-- [ ] TODO — нельзя публиковать unsigned package в production
+- [x] DONE — нельзя публиковать package без sha256
+- [x] DONE — нельзя публиковать unsigned package в production
 - [ ] TODO — rollback должен быть возможен минимум на одну версию назад
 
 ## Update UI

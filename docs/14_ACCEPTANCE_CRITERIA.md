@@ -57,25 +57,28 @@
 
 - [x] DONE — приложение проверяет обновления
 - [x] DONE — приложение и Agent обновляются через GitHub Releases
+- [x] DONE — приложение поддерживает delta update по файлам и фрагментам файлов
+- [x] DONE — app delta update откатывается или переходит на full fallback при поврежденной локальной базе
 - [x] DONE — сервисы проверяют обновления отдельно
 - [x] DONE — любой сервис каталога может обновиться отдельно от приложения
+- [x] DONE — сервисы поддерживают delta update по файлам и фрагментам файлов
 - [x] DONE — неудачное обновление сервиса откатывается
 
 ### Security
 
-- [ ] TODO — package sha256 проверяется
-- [ ] TODO — manifest валидируется
-- [ ] TODO — несовместимые версии отклоняются
+- [x] DONE — package sha256 проверяется
+- [x] DONE — manifest валидируется
+- [x] DONE — несовместимые версии отклоняются
 - [ ] TODO — permissions показываются до установки
 - [ ] TODO — logs redaction работает
 - [ ] TODO — diagnostic export не содержит secrets
-- [ ] TODO — неподписанные production packages запрещены
+- [x] DONE — неподписанные production packages запрещены release pipeline preflight
 
 ### QA
 
-- [ ] TODO — unit tests для Packaging
+- [x] DONE — unit tests для Packaging
 - [ ] TODO — unit tests для Core contracts
-- [ ] TODO — integration tests для Agent/IPC
+- [x] DONE — integration tests для Agent/IPC
 - [ ] TODO — manual QA checklist пройден
 - [ ] TODO — diagnostic bundle проверен
 - [ ] TODO — clean install проверен
