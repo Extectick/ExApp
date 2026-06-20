@@ -96,7 +96,7 @@ Preflight перед production release:
 
 ```powershell
 # Все ключи: app update manifest, service catalog, service packages
-.\tools\new-update-signing-key.ps1 -Purpose all
+.\tools\new-update-signing-key.ps1 -Purpose all | Set-Content -Encoding UTF8 .\release-signing-keys.json
 
 # Только app update manifest, совместимый старый wrapper
 .\tools\new-app-update-signing-key.ps1
@@ -105,6 +105,22 @@ Preflight перед production release:
 В GitHub secrets нужно заносить private key значения (`GitHubSecretValue` или
 `GitHubSecretBase64Value`). В GitHub variables нужно заносить public key значения
 и `KeyIdVariableValue`.
+
+Применить generated JSON через GitHub CLI:
+
+```powershell
+# Сначала посмотреть, какие secrets/vars будут установлены
+.\tools\apply-release-secrets.ps1 -InputPath .\release-signing-keys.json -WhatIf
+
+# Установить signing keys и включить production guards
+.\tools\apply-release-secrets.ps1 -InputPath .\release-signing-keys.json -EnableProductionGuards
+
+# Проверить готовность release pipeline
+.\tools\check-release-readiness.ps1 -Production
+```
+
+`release-signing-keys.json` содержит private keys. Его нельзя коммитить и нельзя
+хранить в репозитории.
 
 ## Service updates
 
