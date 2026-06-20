@@ -128,6 +128,12 @@ foreach ($service in $catalog.services) {
 
                 $deltaHash = (Get-FileHash -Algorithm SHA256 $deltaPackage.FullName).Hash.ToLowerInvariant()
                 $deltaSize = $deltaPackage.Length
+                if ($deltaSize -ge $size) {
+                    Write-Warning "Skipping service delta '$($deltaPackage.Name)' because it is not smaller than the full package."
+                    Remove-Item -Force $deltaPackage.FullName, "$($deltaPackage.FullName).sha256", "$($deltaPackage.FullName).size" -ErrorAction SilentlyContinue
+                    continue
+                }
+
                 $deltaHash | Set-Content -Encoding ASCII (Join-Path $resolvedArtifactsDirectory "$($deltaPackage.Name).sha256")
                 $deltaSize | Set-Content -Encoding ASCII (Join-Path $resolvedArtifactsDirectory "$($deltaPackage.Name).size")
                 $deltas += [pscustomobject]@{
@@ -146,8 +152,19 @@ foreach ($service in $catalog.services) {
         }
 
         $deltas = @($deltas | Sort-Object size)
-        $service | Add-Member -NotePropertyName delta -NotePropertyValue $deltas[0] -Force
-        $service | Add-Member -NotePropertyName deltas -NotePropertyValue $deltas -Force
+        if ($deltas.Count -gt 0) {
+            $service | Add-Member -NotePropertyName delta -NotePropertyValue $deltas[0] -Force
+            $service | Add-Member -NotePropertyName deltas -NotePropertyValue $deltas -Force
+        }
+        else {
+            if ($service.PSObject.Properties.Name -contains "delta") {
+                $service.PSObject.Properties.Remove("delta")
+            }
+
+            if ($service.PSObject.Properties.Name -contains "deltas") {
+                $service.PSObject.Properties.Remove("deltas")
+            }
+        }
     }
     else {
         if ($service.PSObject.Properties.Name -contains "delta") {

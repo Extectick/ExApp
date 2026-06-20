@@ -189,6 +189,7 @@ public sealed class AppUpdateClient : IDisposable
         var normalizedCurrent = NormalizeVersion(currentVersion);
         var delta = EnumerateDeltas(manifest)
             .Where(delta => NormalizeVersion(delta.BaseVersion).Equals(normalizedCurrent, StringComparison.OrdinalIgnoreCase))
+            .Where(delta => delta.Size < manifest.Package.Size)
             .OrderBy(static delta => delta.Size)
             .FirstOrDefault();
         return delta is not null

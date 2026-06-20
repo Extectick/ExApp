@@ -10,4 +10,8 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ExApp.Core\ExApp.Core.csproj" />
+  </ItemGroup>
+
 </Project>
