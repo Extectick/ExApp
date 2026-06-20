@@ -165,6 +165,7 @@ public sealed class PackageManager
             var manifest = _reader.ReadManifest(stagingDirectory);
             var delta = _reader.ReadDeltaManifest(stagingDirectory);
             ValidateDeltaMetadata(delta, manifest);
+            ValidateDeltaPayload(delta, stagingDirectory);
             return manifest;
         }
         finally
@@ -203,6 +204,7 @@ public sealed class PackageManager
             var targetChecksums = _reader.ReadChecksums(deltaStagingDirectory);
             var delta = _reader.ReadDeltaManifest(deltaStagingDirectory);
             ValidateDeltaMetadata(delta, manifest);
+            ValidateDeltaPayload(delta, deltaStagingDirectory);
 
             var serviceRoot = GetServiceRoot(manifest.Id);
             var statePath = Path.Combine(serviceRoot, "package-state.json");
@@ -541,12 +543,45 @@ public sealed class PackageManager
                 {
                     throw new PackageException("delta.invalidPatchOperation", $"Service delta patch operation for '{patch.Path}' is invalid.");
                 }
+
+                if (operation.Type.Equals("copy", StringComparison.OrdinalIgnoreCase) &&
+                    !IsRangeWithin(operation.Offset, operation.Length, patch.BaseSize))
+                {
+                    throw new PackageException("delta.invalidPatchOperation", $"Service delta patch copy operation for '{patch.Path}' exceeds the base file.");
+                }
+            }
+
+            var outputLength = patch.Operations.Sum(static operation => (long)operation.Length);
+            if (outputLength != patch.TargetSize)
+            {
+                throw new PackageException("delta.invalidPatchOperation", $"Service delta patch '{patch.Path}' does not produce the target file size.");
             }
         }
 
         foreach (var path in delta.Delete)
         {
             NormalizePackagePath(path);
+        }
+    }
+
+    private static void ValidateDeltaPayload(ServiceDeltaManifest delta, string deltaDirectory)
+    {
+        foreach (var patch in delta.Patches)
+        {
+            var dataPath = PackageValidator.ResolvePackagePath(deltaDirectory, patch.DataPath);
+            if (!File.Exists(dataPath))
+            {
+                throw new PackageException("delta.patchDataMissing", $"Service delta patch data '{patch.DataPath}' is missing.");
+            }
+
+            var dataSize = new FileInfo(dataPath).Length;
+            foreach (var operation in patch.Operations.Where(static operation => operation.Type.Equals("data", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!IsRangeWithin(operation.DataOffset, operation.Length, dataSize))
+                {
+                    throw new PackageException("delta.invalidPatchOperation", $"Service delta patch data operation for '{patch.Path}' exceeds '{patch.DataPath}'.");
+                }
+            }
         }
     }
 
@@ -723,6 +758,11 @@ public sealed class PackageManager
             }
 
             source.Seek(offset, SeekOrigin.Begin);
+            if (!IsRangeWithin(offset, operation.Length, source.Length))
+            {
+                throw new PackageException("delta.patchUnexpectedEnd", $"Patch operation for '{patch.Path}' exceeded source length.");
+            }
+
             var remaining = operation.Length;
             while (remaining > 0)
             {
@@ -743,6 +783,12 @@ public sealed class PackageManager
         using var stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
+
+    private static bool IsRangeWithin(long offset, int length, long sourceSize) =>
+        offset >= 0 &&
+        length > 0 &&
+        sourceSize >= 0 &&
+        offset <= sourceSize - length;
 
     private static string NormalizePackagePath(string path)
     {

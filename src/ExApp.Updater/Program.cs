@@ -339,6 +339,18 @@ static void ValidateDeltaManifest(AppDeltaManifest? delta, AppFileManifest manif
             {
                 throw new InvalidOperationException($"Application delta patch operation for '{patch.Path}' is invalid.");
             }
+
+            if (operation.Type.Equals("copy", StringComparison.OrdinalIgnoreCase) &&
+                !IsRangeWithin(operation.Offset, operation.Length, patch.BaseSize))
+            {
+                throw new InvalidOperationException($"Application delta patch copy operation for '{patch.Path}' exceeds the base file.");
+            }
+        }
+
+        var outputLength = patch.Operations.Sum(static operation => (long)operation.Length);
+        if (outputLength != patch.TargetSize)
+        {
+            throw new InvalidOperationException($"Application delta patch '{patch.Path}' does not produce the target file size.");
         }
     }
 
@@ -381,6 +393,15 @@ static async Task ValidateStagingAsync(string stagingRoot, AppFileManifest manif
         if (!File.Exists(dataPath))
         {
             throw new FileNotFoundException($"Staged application patch data '{patch.DataPath}' is missing.", dataPath);
+        }
+
+        var dataSize = new FileInfo(dataPath).Length;
+        foreach (var operation in patch.Operations.Where(static operation => operation.Type.Equals("data", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!IsRangeWithin(operation.DataOffset, operation.Length, dataSize))
+            {
+                throw new InvalidOperationException($"Application delta patch data operation for '{patch.Path}' exceeds '{patch.DataPath}'.");
+            }
         }
     }
 }
@@ -887,6 +908,11 @@ static async Task ApplyPatchAsync(
         }
 
         source.Seek(offset, SeekOrigin.Begin);
+        if (!IsRangeWithin(offset, operation.Length, source.Length))
+        {
+            throw new EndOfStreamException($"Patch operation for '{patch.Path}' exceeded source length.");
+        }
+
         var remaining = operation.Length;
         while (remaining > 0)
         {
@@ -901,6 +927,12 @@ static async Task ApplyPatchAsync(
         }
     }
 }
+
+static bool IsRangeWithin(long offset, int length, long sourceSize) =>
+    offset >= 0 &&
+    length > 0 &&
+    sourceSize >= 0 &&
+    offset <= sourceSize - length;
 
 static Task WritePlanAsync(string backupRoot, UpdatePlan plan)
 {

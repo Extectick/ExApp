@@ -1,6 +1,8 @@
 using ExApp.Packaging.Models;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace ExApp.Packaging.Tests;
 
@@ -237,6 +239,44 @@ public sealed class PackageManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task InstallDeltaAsync_PatchDataOutsideBounds_RejectsDelta()
+    {
+        var manager = CreateManager();
+        var basePackage = _packages.Create(version: "1.0.0", largePayloadMarker: "base-marker");
+        var targetPackage = _packages.Create(version: "1.1.0", largePayloadMarker: "target-marker");
+        await manager.InstallAsync(basePackage);
+
+        var deltaPackage = RewriteDeltaManifest(
+            _packages.CreateDeltaWithPatch(basePackage, targetPackage),
+            manifest => manifest["patches"]![0]!["operations"]![1]!["dataOffset"] = 10_000_000);
+
+        var exception = await Assert.ThrowsAsync<PackageException>(
+            () => manager.InstallDeltaAsync(deltaPackage));
+
+        Assert.Equal("delta.invalidPatchOperation", exception.Code);
+        Assert.Equal("1.0.0", manager.GetState("test-service")?.CurrentVersion);
+    }
+
+    [Fact]
+    public async Task InstallDeltaAsync_PatchTargetSizeMismatch_RejectsDelta()
+    {
+        var manager = CreateManager();
+        var basePackage = _packages.Create(version: "1.0.0", largePayloadMarker: "base-marker");
+        var targetPackage = _packages.Create(version: "1.1.0", largePayloadMarker: "target-marker");
+        await manager.InstallAsync(basePackage);
+
+        var deltaPackage = RewriteDeltaManifest(
+            _packages.CreateDeltaWithPatch(basePackage, targetPackage),
+            manifest => manifest["patches"]![0]!["targetSize"] = 1);
+
+        var exception = await Assert.ThrowsAsync<PackageException>(
+            () => manager.InstallDeltaAsync(deltaPackage));
+
+        Assert.Equal("delta.invalidPatchOperation", exception.Code);
+        Assert.Equal("1.0.0", manager.GetState("test-service")?.CurrentVersion);
+    }
+
+    [Fact]
     public async Task UninstallAsync_PreserveData_KeepsDataAndRemovesBinaries()
     {
         var manager = CreateManager();
@@ -311,4 +351,24 @@ public sealed class PackageManagerTests : IDisposable
         Architecture = "x64",
         ServicePackageSigningPublicKeyPem = servicePackageSigningPublicKeyPem
     });
+
+    private string RewriteDeltaManifest(string packagePath, Action<JsonNode> mutate)
+    {
+        var workDirectory = Path.Combine(_temporaryRoot, $"rewrite-delta-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(workDirectory);
+        ZipFile.ExtractToDirectory(packagePath, workDirectory);
+
+        var manifestPath = Path.Combine(workDirectory, "service-delta.json");
+        var manifest = JsonNode.Parse(File.ReadAllText(manifestPath))
+            ?? throw new InvalidOperationException("service-delta.json is empty.");
+        mutate(manifest);
+        File.WriteAllText(
+            manifestPath,
+            manifest.ToJsonString(new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
+
+        var rewrittenPackagePath = Path.Combine(_temporaryRoot, $"rewritten-delta-{Guid.NewGuid():N}.svcdelta");
+        ZipFile.CreateFromDirectory(workDirectory, rewrittenPackagePath, CompressionLevel.Fastest, includeBaseDirectory: false);
+        Directory.Delete(workDirectory, recursive: true);
+        return rewrittenPackagePath;
+    }
 }
