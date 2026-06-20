@@ -48,6 +48,12 @@ if ($DeltaPackagePath) {
         $deltaName = Split-Path $resolvedDeltaPackagePath -Leaf
         $deltaHash = (Get-FileHash -Algorithm SHA256 $resolvedDeltaPackagePath).Hash.ToLowerInvariant()
         $deltaSize = (Get-Item $resolvedDeltaPackagePath).Length
+        if ($deltaSize -ge $size) {
+            Write-Warning "Skipping app delta '$deltaName' because it is not smaller than the full package."
+            Remove-Item -Force $resolvedDeltaPackagePath, "$resolvedDeltaPackagePath.sha256", "$resolvedDeltaPackagePath.size" -ErrorAction SilentlyContinue
+            continue
+        }
+
         $deltaInspectRoot = Join-Path (Split-Path $resolvedDeltaPackagePath -Parent) "inspect-$($deltaName -replace '[^a-zA-Z0-9.-]', '-')"
         $changedFiles = 0
         $patchedFiles = 0
@@ -82,8 +88,10 @@ if ($DeltaPackagePath) {
     }
 
     $deltas = @($deltas | Sort-Object { $_.size })
-    $manifest["delta"] = $deltas[0]
-    $manifest["deltas"] = $deltas
+    if ($deltas.Count -gt 0) {
+        $manifest["delta"] = $deltas[0]
+        $manifest["deltas"] = $deltas
+    }
 }
 
 $resolvedOutput = Join-Path $repoRoot $OutputPath
@@ -93,7 +101,11 @@ $hash | Set-Content -Encoding ASCII "$packagePath.sha256"
 $size | Set-Content -Encoding ASCII "$packagePath.size"
 if ($DeltaPackagePath) {
     foreach ($path in $DeltaPackagePath) {
-        $deltaPath = Resolve-Path $path
+        $deltaPath = Resolve-Path $path -ErrorAction SilentlyContinue
+        if (-not $deltaPath) {
+            continue
+        }
+
         (Get-FileHash -Algorithm SHA256 $deltaPath).Hash.ToLowerInvariant() | Set-Content -Encoding ASCII "$deltaPath.sha256"
         (Get-Item $deltaPath).Length | Set-Content -Encoding ASCII "$deltaPath.size"
     }

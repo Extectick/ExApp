@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.IO.Compression;
 using System.Reflection;
 using System.Text.Json;
 using ExApp.Core.Updates;
@@ -115,7 +114,7 @@ internal sealed class ApplicationUpdateService
                 Directory.Delete(stagingPath, recursive: true);
             }
 
-            ZipFile.ExtractToDirectory(download.PackagePath, stagingPath);
+            AppPackageExtractor.ExtractSecure(download.PackagePath, stagingPath);
 
             var runnerPath = PrepareUpdaterRunner(Path.Combine(updateRoot, "runner"));
 

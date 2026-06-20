@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using ExApp.Core.Updates;
 
 var arguments = ParseArguments(args);
 var releaseVersion = arguments.GetValueOrDefault("version") ?? "unknown";
@@ -550,7 +550,7 @@ static async Task<string?> TryPrepareFallbackStagingAsync(
         Directory.Delete(fallbackStagingPath, recursive: true);
     }
 
-    ZipFile.ExtractToDirectory(packagePath, fallbackStagingPath);
+    AppPackageExtractor.ExtractSecure(packagePath, fallbackStagingPath);
     return fallbackStagingPath;
 }
 
@@ -1034,6 +1034,7 @@ static void ValidateRelativePath(string relativePath)
 {
     if (string.IsNullOrWhiteSpace(relativePath) ||
         Path.IsPathRooted(relativePath) ||
+        relativePath.Contains(':', StringComparison.Ordinal) ||
         relativePath.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries).Any(static segment => segment == ".."))
     {
         throw new InvalidOperationException($"Path '{relativePath}' is not a safe relative path.");

@@ -58,8 +58,8 @@ public sealed class AppUpdateClientTests : IDisposable
         Directory.CreateDirectory(_root);
         var fullPackagePath = Path.Combine(_root, "exapp-0.2.0-win-x64.zip");
         var deltaPackagePath = Path.Combine(_root, "exapp-delta-0.1.0-to-0.2.0-win-x64.zip");
-        await File.WriteAllTextAsync(fullPackagePath, "full-package");
-        await File.WriteAllTextAsync(deltaPackagePath, "delta-package");
+        await File.WriteAllTextAsync(fullPackagePath, "full-package-with-more-bytes");
+        await File.WriteAllTextAsync(deltaPackagePath, "delta");
         var fullHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(fullPackagePath)))
             .ToLowerInvariant();
         var deltaHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(deltaPackagePath)))
@@ -135,6 +135,49 @@ public sealed class AppUpdateClientTests : IDisposable
         var download = await client.DownloadAsync(manifest, "0.1.5", Path.Combine(_root, "downloads"));
 
         Assert.EndsWith("exapp-0.2.0-win-x64.zip", download);
+        Assert.Equal(fullHash, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(download))).ToLowerInvariant());
+    }
+
+    [Fact]
+    public async Task DownloadAsync_FallsBackToFullPackageWhenMatchingDeltaIsLarger()
+    {
+        Directory.CreateDirectory(_root);
+        var fullPackagePath = Path.Combine(_root, "exapp-0.2.1-win-x64.zip");
+        var deltaPackagePath = Path.Combine(_root, "exapp-delta-0.2.0-to-0.2.1-win-x64.zip");
+        await File.WriteAllTextAsync(fullPackagePath, "small-full");
+        await File.WriteAllTextAsync(deltaPackagePath, new string('x', 4096));
+        var fullHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(fullPackagePath)))
+            .ToLowerInvariant();
+        var deltaHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(deltaPackagePath)))
+            .ToLowerInvariant();
+
+        using var client = new AppUpdateClient();
+        var manifest = new AppReleaseManifest
+        {
+            ManifestVersion = 1,
+            Version = "0.2.1",
+            Channel = "stable",
+            PublishedAt = DateTimeOffset.UtcNow,
+            Package = new AppReleasePackage
+            {
+                Url = fullPackagePath,
+                Sha256 = fullHash,
+                Size = new FileInfo(fullPackagePath).Length
+            },
+            Delta = new AppDeltaPackage
+            {
+                BaseVersion = "0.2.0",
+                Url = deltaPackagePath,
+                Sha256 = deltaHash,
+                Size = new FileInfo(deltaPackagePath).Length,
+                ChangedFiles = 1,
+                DeletedFiles = 0
+            }
+        };
+
+        var download = await client.DownloadAsync(manifest, "0.2.0", Path.Combine(_root, "downloads"));
+
+        Assert.EndsWith("exapp-0.2.1-win-x64.zip", download);
         Assert.Equal(fullHash, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(download))).ToLowerInvariant());
     }
 

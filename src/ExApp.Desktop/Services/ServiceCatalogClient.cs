@@ -105,7 +105,7 @@ internal sealed class ServiceCatalogClient
         CancellationToken cancellationToken = default,
         bool preferDelta = true)
     {
-        var delta = preferDelta ? SelectDelta(item, currentVersion) : null;
+        var delta = preferDelta ? SelectDelta(item, currentVersion, item.Package?.Size) : null;
         var useDelta = delta is not null;
         var package = useDelta
             ? new PackageDescriptor(delta!.Url, delta.Sha256, delta.Size, ".svcdelta")
@@ -305,7 +305,7 @@ internal sealed class ServiceCatalogClient
         return targetPath;
     }
 
-    private static ServiceCatalogDeltaPackage? SelectDelta(ServiceCatalogItem item, string? currentVersion)
+    private static ServiceCatalogDeltaPackage? SelectDelta(ServiceCatalogItem item, string? currentVersion, long? fullPackageSize)
     {
         if (string.IsNullOrWhiteSpace(currentVersion))
         {
@@ -314,6 +314,7 @@ internal sealed class ServiceCatalogClient
 
         return EnumerateDeltas(item)
             .Where(delta => delta.BaseVersion.Equals(currentVersion, StringComparison.OrdinalIgnoreCase))
+            .Where(delta => fullPackageSize is null || delta.Size < fullPackageSize)
             .OrderBy(static delta => delta.Size)
             .FirstOrDefault();
     }
