@@ -88,6 +88,13 @@ SIGNING_CERTIFICATE_PASSWORD
 REQUIRE_CODE_SIGNING=true
 ```
 
+Release workflow работает fail-closed: app release требует
+`REQUIRE_CODE_SIGNING=true`, code-signing certificate secrets и app update
+signing keys до сборки package. Service release требует
+`REQUIRE_SERVICE_PACKAGE_SIGNATURE=true`, service package signing keys и catalog
+signing keys. Без этих значений production release завершается ошибкой до
+публикации артефактов.
+
 Preflight перед production release:
 
 ```powershell

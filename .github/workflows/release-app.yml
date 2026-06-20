@@ -47,6 +47,43 @@ jobs:
           "assembly_version=$assemblyVersion" >> $env:GITHUB_OUTPUT
           "channel=$channel" >> $env:GITHUB_OUTPUT
 
+      - name: Enforce signed app release
+        shell: pwsh
+        env:
+          REQUIRE_CODE_SIGNING: ${{ vars.REQUIRE_CODE_SIGNING }}
+          SIGNING_CERTIFICATE_BASE64: ${{ secrets.SIGNING_CERTIFICATE_BASE64 }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          APP_UPDATE_SIGNING_PRIVATE_KEY_PEM: ${{ secrets.APP_UPDATE_SIGNING_PRIVATE_KEY_PEM }}
+          APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64: ${{ secrets.APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64 }}
+          APP_UPDATE_SIGNING_PUBLIC_KEY_PEM: ${{ vars.APP_UPDATE_SIGNING_PUBLIC_KEY_PEM }}
+          APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64: ${{ vars.APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64 }}
+        run: |
+          function Has-Value([string[]]$values) {
+            foreach ($value in $values) {
+              if (-not [string]::IsNullOrWhiteSpace($value)) {
+                return $true
+              }
+            }
+
+            return $false
+          }
+
+          if ($env:REQUIRE_CODE_SIGNING -ne 'true') {
+            throw "REQUIRE_CODE_SIGNING repository variable must be true for app releases."
+          }
+          if (-not (Has-Value @($env:SIGNING_CERTIFICATE_BASE64))) {
+            throw "SIGNING_CERTIFICATE_BASE64 repository secret is required for app releases."
+          }
+          if (-not (Has-Value @($env:SIGNING_CERTIFICATE_PASSWORD))) {
+            throw "SIGNING_CERTIFICATE_PASSWORD repository secret is required for app releases."
+          }
+          if (-not (Has-Value @($env:APP_UPDATE_SIGNING_PRIVATE_KEY_PEM, $env:APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64))) {
+            throw "APP_UPDATE_SIGNING_PRIVATE_KEY_PEM or APP_UPDATE_SIGNING_PRIVATE_KEY_BASE64 repository secret is required."
+          }
+          if (-not (Has-Value @($env:APP_UPDATE_SIGNING_PUBLIC_KEY_PEM, $env:APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64))) {
+            throw "APP_UPDATE_SIGNING_PUBLIC_KEY_PEM or APP_UPDATE_SIGNING_PUBLIC_KEY_BASE64 repository variable is required."
+          }
+
       - name: Build and test
         shell: pwsh
         env:
