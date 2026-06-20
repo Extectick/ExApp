@@ -100,7 +100,7 @@ $files = Get-ChildItem -Path $stagingRoot -File -Recurse |
     -PrivateKeyPem $ServicePackageSigningPrivateKeyPem `
     -PrivateKeyBase64 $ServicePackageSigningPrivateKeyBase64 `
     -KeyId $ServicePackageSigningKeyId `
-    -RequireSignature:$RequireSignature | Out-Host
+    -RequireSignature:$RequireSignature | Out-Null
 
 Remove-Item -Force -Path $packagePath -ErrorAction SilentlyContinue
 Remove-Item -Force -Path $zipPath -ErrorAction SilentlyContinue

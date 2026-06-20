@@ -87,6 +87,8 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
           REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_PEM: ${{ vars.SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_PEM }}
+          SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_BASE64: ${{ vars.SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_BASE64 }}
         run: |
           $headers = @{
             "User-Agent" = "ExApp-Services-Release"
@@ -131,9 +133,25 @@ jobs:
               $previousPackageName = [IO.Path]::GetFileName(([uri]$previousService.package.url).AbsolutePath)
               $previousPackage = "artifacts/previous-$($previous.tag_name)-$previousPackageName"
               Invoke-WebRequest -Headers @{ "User-Agent" = "ExApp-Services-Release" } -Uri $previousService.package.url -OutFile $previousPackage
-              ./tools/package-service-delta.ps1 `
-                -BasePackagePath $previousPackage `
-                -TargetPackagePath $targetPackage
+              $deltaInfo = $null
+              try {
+                $deltaInfo = ./tools/package-service-delta.ps1 `
+                  -BasePackagePath $previousPackage `
+                  -TargetPackagePath $targetPackage |
+                  ConvertFrom-Json
+                ./tools/test-service-delta-package.ps1 `
+                  -BasePackagePath $previousPackage `
+                  -TargetPackagePath $targetPackage `
+                  -DeltaPackagePath $deltaInfo.Path `
+                  -ServicePackageSigningPublicKeyPem $env:SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_PEM `
+                  -ServicePackageSigningPublicKeyBase64 $env:SERVICE_PACKAGE_SIGNING_PUBLIC_KEY_BASE64
+              }
+              catch {
+                Write-Warning "Skipping service delta $($service.id) from $($previousService.version): $($_.Exception.Message)"
+                if ($deltaInfo -and $deltaInfo.Path) {
+                  Remove-Item -Force $deltaInfo.Path, "$($deltaInfo.Path).sha256", "$($deltaInfo.Path).size" -ErrorAction SilentlyContinue
+                }
+              }
             }
           }
 

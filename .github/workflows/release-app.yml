@@ -158,10 +158,25 @@ jobs:
         run: |
           $previousPackages = Get-Content -Raw artifacts/app/previous-packages.json | ConvertFrom-Json
           foreach ($previous in @($previousPackages)) {
-            ./tools/package-exapp-delta.ps1 `
-              -BasePackagePath $previous.package `
-              -BaseVersion $previous.version `
-              -Version '${{ steps.release.outputs.assembly_version }}'
+            $deltaInfo = $null
+            try {
+              $deltaInfo = ./tools/package-exapp-delta.ps1 `
+                -BasePackagePath $previous.package `
+                -BaseVersion $previous.version `
+                -Version '${{ steps.release.outputs.assembly_version }}' |
+                ConvertFrom-Json
+              ./tools/test-app-delta-package.ps1 `
+                -BasePackagePath $previous.package `
+                -DeltaPackagePath $deltaInfo.Path `
+                -TargetManifestPath artifacts/app/publish/desktop/app-files.json `
+                -TargetVersion '${{ steps.release.outputs.assembly_version }}'
+            }
+            catch {
+              Write-Warning "Skipping app delta from $($previous.version): $($_.Exception.Message)"
+              if ($deltaInfo -and $deltaInfo.Path) {
+                Remove-Item -Force $deltaInfo.Path, "$($deltaInfo.Path).sha256", "$($deltaInfo.Path).size" -ErrorAction SilentlyContinue
+              }
+            }
           }
 
       - name: Generate update manifest
