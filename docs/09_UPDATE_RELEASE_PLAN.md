@@ -92,6 +92,20 @@ Preflight перед production release:
 Скрипт проверяет наличие GitHub secrets/vars через `gh`, а если GitHub CLI
 недоступен — локальные environment variables с теми же именами.
 
+Сгенерировать signing keys для GitHub secrets/vars:
+
+```powershell
+# Все ключи: app update manifest, service catalog, service packages
+.\tools\new-update-signing-key.ps1 -Purpose all
+
+# Только app update manifest, совместимый старый wrapper
+.\tools\new-app-update-signing-key.ps1
+```
+
+В GitHub secrets нужно заносить private key значения (`GitHubSecretValue` или
+`GitHubSecretBase64Value`). В GitHub variables нужно заносить public key значения
+и `KeyIdVariableValue`.
+
 ## Service updates
 
 Service updates не должны зависеть от обновления всего приложения.
