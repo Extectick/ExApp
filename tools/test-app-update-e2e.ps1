@@ -4,6 +4,7 @@ param(
     [string]$TargetVersion = "0.1.901",
     [string]$OutputDirectory = "artifacts/app-update-e2e",
     [switch]$CorruptInstalledDeltaBase,
+    [switch]$UseLazyFallback,
     [switch]$KeepArtifacts
 )
 
@@ -78,8 +79,11 @@ try {
 
     Expand-Archive -Path $basePackage -DestinationPath $installedRoot -Force
     Expand-Archive -Path $deltaInfo.Path -DestinationPath $stagingRoot -Force
-    if ($CorruptInstalledDeltaBase) {
+    if ($CorruptInstalledDeltaBase -and -not $UseLazyFallback) {
         Expand-Archive -Path $targetPackage -DestinationPath $fallbackStagingRoot -Force
+    }
+
+    if ($CorruptInstalledDeltaBase) {
         $deltaManifest = Get-Content -Raw (Join-Path $stagingRoot "app-delta.json") | ConvertFrom-Json
         $pathToCorrupt = $null
         if ($deltaManifest.patches -and @($deltaManifest.patches).Count -gt 0) {
@@ -117,7 +121,16 @@ try {
         "--no-restart", "true",
         "--update-root", $updateRoot
     )
-    if ($CorruptInstalledDeltaBase) {
+    if ($CorruptInstalledDeltaBase -and $UseLazyFallback) {
+        $targetPackageHash = (Get-FileHash -Algorithm SHA256 -Path $targetPackage).Hash.ToLowerInvariant()
+        $targetPackageSize = (Get-Item $targetPackage).Length
+        $updaterArguments += @(
+            "--fallback-package-url", $targetPackage,
+            "--fallback-package-sha256", $targetPackageHash,
+            "--fallback-package-size", $targetPackageSize
+        )
+    }
+    elseif ($CorruptInstalledDeltaBase) {
         $updaterArguments += @("--fallback-staging", $fallbackStagingRoot)
     }
 
@@ -170,6 +183,7 @@ try {
         PatchedFiles = $deltaInfo.PatchedFiles
         DeletedFiles = $deltaInfo.DeletedFiles
         FallbackUsed = $fallbackUsed
+        LazyFallback = [bool]$UseLazyFallback
         InstalledRoot = $installedRoot
     } | ConvertTo-Json -Depth 5 | Write-Output
 }

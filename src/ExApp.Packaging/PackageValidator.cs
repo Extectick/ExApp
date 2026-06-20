@@ -86,7 +86,7 @@ internal sealed partial class PackageValidator(PackageManagerOptions options)
 
             var filePath = ResolvePackagePath(packageDirectory, entry.Path);
             Require(File.Exists(filePath), "checksums.fileMissing", $"Checksummed file '{entry.Path}' is missing.");
-            var actualHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(filePath))).ToLowerInvariant();
+            var actualHash = ComputeSha256(filePath);
             Require(actualHash.Equals(entry.Sha256, StringComparison.OrdinalIgnoreCase), "checksums.mismatch", $"Checksum mismatch for '{entry.Path}'.");
         }
 
@@ -225,6 +225,12 @@ internal sealed partial class PackageValidator(PackageManagerOptions options)
             Environment.GetEnvironmentVariable(AllowUnsignedEnvironmentVariable),
             "true",
             StringComparison.OrdinalIgnoreCase);
+
+    private static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
 
     private sealed record ServicePackageSignature(
         string Algorithm,
