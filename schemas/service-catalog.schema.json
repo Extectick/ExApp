@@ -83,7 +83,7 @@
           "delta": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["baseVersion", "url", "sha256", "size", "changedFiles", "deletedFiles"],
+            "required": ["baseVersion", "url", "sha256", "size", "changedFiles", "patchedFiles", "deletedFiles"],
             "properties": {
               "baseVersion": {
                 "type": "string",
@@ -106,7 +106,7 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["baseVersion", "url", "sha256", "size", "changedFiles", "deletedFiles"],
+              "required": ["baseVersion", "url", "sha256", "size", "changedFiles", "patchedFiles", "deletedFiles"],
               "properties": {
                 "baseVersion": {
                   "type": "string",

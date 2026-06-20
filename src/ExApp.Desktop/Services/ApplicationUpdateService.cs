@@ -108,7 +108,7 @@ internal sealed class ApplicationUpdateService
                 "ExApp",
                 release.Version,
                 download.IsDelta ? "installing-delta" : "installing",
-                download.IsDelta ? "Delta package downloaded. Full package fallback will be prepared." : null));
+                download.IsDelta ? "Delta package downloaded. Full fallback will be downloaded only if needed." : null));
             var stagingPath = Path.Combine(updateRoot, "staging");
             if (Directory.Exists(stagingPath))
             {
@@ -116,25 +116,6 @@ internal sealed class ApplicationUpdateService
             }
 
             ZipFile.ExtractToDirectory(download.PackagePath, stagingPath);
-
-            string? fallbackStagingPath = null;
-            if (download.IsDelta)
-            {
-                var fallbackDownload = await _client.DownloadPackageAsync(
-                    release,
-                    CurrentVersion,
-                    Path.Combine(updateRoot, "fallback"),
-                    progress: null,
-                    cancellationToken,
-                    preferDelta: false);
-                fallbackStagingPath = Path.Combine(updateRoot, "fallback-staging");
-                if (Directory.Exists(fallbackStagingPath))
-                {
-                    Directory.Delete(fallbackStagingPath, recursive: true);
-                }
-
-                ZipFile.ExtractToDirectory(fallbackDownload.PackagePath, fallbackStagingPath);
-            }
 
             var runnerPath = PrepareUpdaterRunner(Path.Combine(updateRoot, "runner"));
 
@@ -151,10 +132,14 @@ internal sealed class ApplicationUpdateService
                     "--version", release.Version
                 }
             };
-            if (!string.IsNullOrWhiteSpace(fallbackStagingPath))
+            if (download.IsDelta)
             {
-                startInfo.ArgumentList.Add("--fallback-staging");
-                startInfo.ArgumentList.Add(fallbackStagingPath);
+                startInfo.ArgumentList.Add("--fallback-package-url");
+                startInfo.ArgumentList.Add(release.Package.Url);
+                startInfo.ArgumentList.Add("--fallback-package-sha256");
+                startInfo.ArgumentList.Add(release.Package.Sha256);
+                startInfo.ArgumentList.Add("--fallback-package-size");
+                startInfo.ArgumentList.Add(release.Package.Size.ToString());
             }
 
             _ = Process.Start(startInfo) ?? throw new InvalidOperationException("ExApp Updater could not be started.");

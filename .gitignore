@@ -10,3 +10,6 @@ artifacts/
 !artifacts/.gitkeep
 packages/cache/
 packages/staging/
+release-signing-keys*.json
+*.pfx
+*.p12

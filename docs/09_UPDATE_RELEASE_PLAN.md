@@ -21,8 +21,13 @@ Delta содержит измененные/новые файлы, список 
 `copy/data` для фрагментной пересборки измененных файлов. Updater применяет
 файловый manifest, заменяет только нужные файлы, не трогает неизмененные, делает
 backup затронутых файлов и откатывает их при неуспешном старте новой версии.
+Генерация patch payload использует потоковую chunk-индексацию, поэтому крупные
+бинарники не загружаются целиком в память при сборке release.
 Если delta не применима из-за поврежденной локальной базы или несовпадения hash,
-updater автоматически переключается на full package fallback.
+updater автоматически переключается на full package fallback. Full fallback не
+скачивается заранее для каждого delta update: Desktop передает updater-у URL,
+размер и SHA-256 полного пакета, а updater скачивает и проверяет его только если
+delta реально не применима.
 Для первичной установки выпускается per-user MSI installer с тем же payload.
 Установка идет в `%LocalAppData%\Programs\ExApp`, чтобы updater мог менять файлы
 без прав администратора.
@@ -96,7 +101,7 @@ Preflight перед production release:
 
 ```powershell
 # Все ключи: app update manifest, service catalog, service packages
-.\tools\new-update-signing-key.ps1 -Purpose all
+.\tools\new-update-signing-key.ps1 -Purpose all | Set-Content -Encoding UTF8 .\release-signing-keys.json
 
 # Только app update manifest, совместимый старый wrapper
 .\tools\new-app-update-signing-key.ps1
@@ -105,6 +110,22 @@ Preflight перед production release:
 В GitHub secrets нужно заносить private key значения (`GitHubSecretValue` или
 `GitHubSecretBase64Value`). В GitHub variables нужно заносить public key значения
 и `KeyIdVariableValue`.
+
+Применить generated JSON через GitHub CLI:
+
+```powershell
+# Сначала посмотреть, какие secrets/vars будут установлены
+.\tools\apply-release-secrets.ps1 -InputPath .\release-signing-keys.json -WhatIf
+
+# Установить signing keys и включить production guards
+.\tools\apply-release-secrets.ps1 -InputPath .\release-signing-keys.json -EnableProductionGuards
+
+# Проверить готовность release pipeline
+.\tools\check-release-readiness.ps1 -Production
+```
+
+`release-signing-keys.json` содержит private keys. Его нельзя коммитить и нельзя
+хранить в репозитории.
 
 ## Service updates
 

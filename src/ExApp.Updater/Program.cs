@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -104,8 +105,18 @@ try
     {
         plan = await BuildPlanAsync(targetPath, manifest, delta);
     }
-    catch (Exception exception) when (delta is not null && fallbackStagingPath is not null && IsDeltaFallbackCandidate(exception))
+    catch (Exception exception) when (delta is not null && IsDeltaFallbackCandidate(exception))
     {
+        fallbackStagingPath ??= await TryPrepareFallbackStagingAsync(
+            arguments,
+            updateRoot,
+            releaseVersion,
+            logPath);
+        if (fallbackStagingPath is null)
+        {
+            throw;
+        }
+
         await File.AppendAllTextAsync(
             logPath,
             $"{DateTimeOffset.Now:o} Delta update cannot be applied, falling back to full package: {exception.Message}{Environment.NewLine}");
@@ -474,6 +485,190 @@ static async Task<UpdatePlan> BuildPlanAsync(string targetRoot, AppFileManifest 
 
 static bool IsDeltaFallbackCandidate(Exception exception) =>
     exception is InvalidOperationException or FileNotFoundException or IOException;
+
+static async Task<string?> TryPrepareFallbackStagingAsync(
+    Dictionary<string, string> arguments,
+    string updateRoot,
+    string releaseVersion,
+    string logPath)
+{
+    if (!arguments.TryGetValue("fallback-package-url", out var fallbackPackageUrl) ||
+        string.IsNullOrWhiteSpace(fallbackPackageUrl) ||
+        !arguments.TryGetValue("fallback-package-sha256", out var fallbackPackageSha256) ||
+        string.IsNullOrWhiteSpace(fallbackPackageSha256) ||
+        !arguments.TryGetValue("fallback-package-size", out var fallbackPackageSizeText) ||
+        !long.TryParse(fallbackPackageSizeText, out var fallbackPackageSize) ||
+        fallbackPackageSize <= 0)
+    {
+        return null;
+    }
+
+    if (fallbackPackageSha256.Length != 64 || !fallbackPackageSha256.All(Uri.IsHexDigit))
+    {
+        return null;
+    }
+
+    var fallbackRoot = Path.Combine(updateRoot, "fallback");
+    Directory.CreateDirectory(fallbackRoot);
+    var packagePath = Path.Combine(
+        fallbackRoot,
+        GetPackageFileName(fallbackPackageUrl, releaseVersion));
+    var fallbackStagingPath = Path.Combine(updateRoot, "fallback-staging");
+
+    await File.AppendAllTextAsync(
+        logPath,
+        $"{DateTimeOffset.Now:o} Preparing lazy full fallback package.{Environment.NewLine}");
+    await DownloadOrCopyPackageAsync(
+        fallbackPackageUrl,
+        packagePath,
+        fallbackPackageSha256,
+        fallbackPackageSize);
+
+    if (Directory.Exists(fallbackStagingPath))
+    {
+        Directory.Delete(fallbackStagingPath, recursive: true);
+    }
+
+    ZipFile.ExtractToDirectory(packagePath, fallbackStagingPath);
+    return fallbackStagingPath;
+}
+
+static async Task DownloadOrCopyPackageAsync(
+    string source,
+    string targetPath,
+    string expectedSha256,
+    long expectedSize)
+{
+    if (File.Exists(targetPath) &&
+        new FileInfo(targetPath).Length == expectedSize &&
+        (await ComputeSha256Async(targetPath)).Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+    {
+        return;
+    }
+
+    var temporaryPath = $"{targetPath}.download";
+    if (IsHttp(source))
+    {
+        if (File.Exists(temporaryPath) &&
+            new FileInfo(temporaryPath).Length == expectedSize &&
+            (await ComputeSha256Async(temporaryPath)).Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            File.Move(temporaryPath, targetPath, overwrite: true);
+            return;
+        }
+
+        await DownloadHttpWithResumeAsync(source, temporaryPath, expectedSize);
+    }
+    else
+    {
+        File.Copy(Path.GetFullPath(source), temporaryPath, overwrite: true);
+    }
+
+    var actualSize = new FileInfo(temporaryPath).Length;
+    if (actualSize != expectedSize)
+    {
+        File.Delete(temporaryPath);
+        throw new InvalidOperationException("Fallback application package has an invalid size.");
+    }
+
+    var actualHash = await ComputeSha256Async(temporaryPath);
+    if (!actualHash.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+    {
+        File.Delete(temporaryPath);
+        throw new InvalidOperationException("Fallback application package SHA-256 does not match the release manifest.");
+    }
+
+    File.Move(temporaryPath, targetPath, overwrite: true);
+}
+
+static async Task DownloadHttpWithResumeAsync(
+    string url,
+    string temporaryPath,
+    long expectedSize)
+{
+    const int maxAttempts = 4;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++)
+    {
+        try
+        {
+            await DownloadHttpAttemptAsync(url, temporaryPath, expectedSize);
+            return;
+        }
+        catch (Exception exception) when (
+            attempt < maxAttempts &&
+            exception is HttpRequestException or IOException or TaskCanceledException)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(300 * attempt * attempt));
+        }
+    }
+
+    await DownloadHttpAttemptAsync(url, temporaryPath, expectedSize);
+}
+
+static async Task DownloadHttpAttemptAsync(
+    string url,
+    string temporaryPath,
+    long expectedSize)
+{
+    var existingLength = File.Exists(temporaryPath) ? new FileInfo(temporaryPath).Length : 0;
+    if (expectedSize > 0 && existingLength > expectedSize)
+    {
+        File.Delete(temporaryPath);
+        existingLength = 0;
+    }
+
+    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("ExApp.Updater/0.1");
+    using var request = new HttpRequestMessage(HttpMethod.Get, url);
+    if (existingLength > 0)
+    {
+        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existingLength, null);
+    }
+
+    using var response = await client.SendAsync(
+        request,
+        HttpCompletionOption.ResponseHeadersRead);
+    if (existingLength > 0 && response.StatusCode == System.Net.HttpStatusCode.OK)
+    {
+        File.Delete(temporaryPath);
+        existingLength = 0;
+    }
+    else if (existingLength > 0 && response.StatusCode != System.Net.HttpStatusCode.PartialContent)
+    {
+        response.EnsureSuccessStatusCode();
+        throw new IOException("The fallback package server did not accept a ranged download request.");
+    }
+
+    response.EnsureSuccessStatusCode();
+    await using var remote = await response.Content.ReadAsStreamAsync();
+    await using var local = new FileStream(
+        temporaryPath,
+        existingLength > 0 ? FileMode.Append : FileMode.Create,
+        FileAccess.Write,
+        FileShare.None,
+        81920,
+        FileOptions.Asynchronous | FileOptions.SequentialScan);
+    await remote.CopyToAsync(local);
+    await local.FlushAsync();
+}
+
+static string GetPackageFileName(string source, string version)
+{
+    if (Uri.TryCreate(source, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+    {
+        return Path.GetFileName(uri.AbsolutePath);
+    }
+
+    var fileName = Path.GetFileName(source);
+    return string.IsNullOrWhiteSpace(fileName)
+        ? $"exapp-{version}-win-x64.zip"
+        : fileName;
+}
+
+static bool IsHttp(string value) =>
+    Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+    (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
 static async Task BackupPlanAsync(string targetRoot, string backupRoot, UpdatePlan plan)
 {
