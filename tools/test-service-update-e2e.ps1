@@ -64,6 +64,13 @@ try {
         -OutputDirectory $packagesRoot |
         ConvertFrom-Json
 
+    & (Join-Path $PSScriptRoot "test-service-delta-package.ps1") `
+        -BasePackagePath $basePackage `
+        -TargetPackagePath $targetPackage `
+        -DeltaPackagePath $deltaInfo.Path `
+        -OutputDirectory (Join-Path $outputRoot "release-delta-verify") |
+        Out-Host
+
     $install = Invoke-PackageTool @("install", $basePackage, "--root", $installRoot)
     if ($install.version -ne $BaseVersion) {
         throw "Installed service version is '$($install.version)', expected '$BaseVersion'."

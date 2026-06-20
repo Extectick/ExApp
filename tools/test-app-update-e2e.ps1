@@ -77,6 +77,16 @@ try {
         -OutputDirectory $deltaOutput
     $deltaInfo = $deltaInfoJson | ConvertFrom-Json
 
+    if (-not $CorruptInstalledDeltaBase) {
+        & (Join-Path $PSScriptRoot "test-app-delta-package.ps1") `
+            -BasePackagePath $basePackage `
+            -DeltaPackagePath $deltaInfo.Path `
+            -TargetManifestPath (Join-Path $targetOutput "publish\desktop\app-files.json") `
+            -TargetVersion $TargetVersion `
+            -OutputDirectory (Join-Path $outputRoot "release-delta-verify") |
+            Out-Host
+    }
+
     Expand-Archive -Path $basePackage -DestinationPath $installedRoot -Force
     Expand-Archive -Path $deltaInfo.Path -DestinationPath $stagingRoot -Force
     if ($CorruptInstalledDeltaBase -and -not $UseLazyFallback) {

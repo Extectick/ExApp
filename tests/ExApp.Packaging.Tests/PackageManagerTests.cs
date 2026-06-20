@@ -239,6 +239,24 @@ public sealed class PackageManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task InstallDeltaAsync_SignedDeltaWithConfiguredKey_Installs()
+    {
+        using var signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var manager = CreateManager(signingKey.ExportSubjectPublicKeyInfoPem());
+        var basePackage = _packages.Create(version: "1.0.0", signingKey: signingKey);
+        var targetPackage = _packages.Create(version: "1.1.0", signingKey: signingKey);
+        await manager.InstallAsync(basePackage);
+
+        var deltaPackage = _packages.CreateDelta(basePackage, targetPackage);
+        var result = await manager.InstallDeltaAsync(deltaPackage);
+
+        Assert.True(result.AppliedDelta);
+        Assert.Equal("1.1.0", result.State.CurrentVersion);
+        Assert.True(File.Exists(Path.Combine(result.InstallDirectory, "checksums.json")));
+        Assert.True(File.Exists(Path.Combine(result.InstallDirectory, "signature.sig")));
+    }
+
+    [Fact]
     public async Task InstallDeltaAsync_PatchDataOutsideBounds_RejectsDelta()
     {
         var manager = CreateManager();

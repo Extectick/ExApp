@@ -706,6 +706,13 @@ public sealed class PackageManager
             throw new PackageException("signature.missing", "signature.sig is missing.");
         }
 
+        var checksumsSource = Path.Combine(deltaDirectory, "checksums.json");
+        if (!File.Exists(checksumsSource))
+        {
+            throw new PackageException("checksums.missing", "checksums.json is missing.");
+        }
+
+        File.Copy(checksumsSource, Path.Combine(targetDirectory, "checksums.json"));
         File.Copy(signatureSource, Path.Combine(targetDirectory, "signature.sig"));
         return new DeltaBuildStats(copied, linked, deletedPaths.Count);
     }

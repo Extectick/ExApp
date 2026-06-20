@@ -64,6 +64,7 @@ flowchart TD
 - [x] DONE — выбирать delta package при совпадении baseVersion
 - [x] DONE — fallback delta -> full package при поврежденной локальной базе
 - [x] DONE — CI smoke для delta update и delta fallback
+- [x] DONE — release gate применяет каждый app delta к предыдущему full package
 
 ## Installer and signing
 
@@ -105,6 +106,12 @@ Preflight перед production release:
 
 Скрипт проверяет наличие GitHub secrets/vars через `gh`, а если GitHub CLI
 недоступен — локальные environment variables с теми же именами.
+
+Release workflows дополнительно применяют каждый сгенерированный app/service
+delta к соответствующему предыдущему full package до публикации. Если delta не
+проходит проверку, workflow удаляет этот delta-артефакт и продолжает выпуск full
+package. Это защищает от публикации delta, который совпал по SHA/metadata, но
+фактически не устанавливается.
 
 Сгенерировать signing keys для GitHub secrets/vars:
 
@@ -175,6 +182,7 @@ flowchart TD
 - [x] DONE — service delta package и file-fragment patch updates
 - [x] DONE — fallback delta -> full package при `delta.*` ошибках
 - [x] DONE — CI smoke для service delta update
+- [x] DONE — release gate применяет каждый service delta к предыдущему full package
 
 ## Channels
 
